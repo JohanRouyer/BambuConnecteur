@@ -25,7 +25,8 @@ projets 3MF, slicer pour comparer des réglages et lire l'état de ta P1S en ré
 | `printer_status` | État de la P1S (températures, progression, AMS, erreurs HMS), en lecture seule |
 | `connector_info` | Chemins utilisés et état de la config |
 
-Les résultats de slicing vont dans `output/`. Un slice identique (mêmes modèles, réglages, presets et
+Les résultats de slicing vont dans `output/<projet>/<variante>/<horodatage>[_plateau-N]/` (variante :
+`original`, `qualite`, `vitesse`... ou `slice` pour un slice simple). Un slice identique (mêmes modèles, réglages, presets et
 version de Bambu Studio) est renvoyé depuis le cache `output/.cache/` ; supprimer ce dossier le vide.
 Chaque slice est noté dans `output/history.jsonl`. Si Bambu Studio se fige (rare), le slice est
 relancé une fois après 5 min, puis abandonné avec un message clair.

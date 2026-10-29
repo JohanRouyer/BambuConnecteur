@@ -117,7 +117,9 @@ def run(models: list[str], machine: str | None = None, process: str | None = Non
     result_json = {}
     if (out_dir / "result.json").exists():
         result_json = json.loads((out_dir / "result.json").read_text(encoding="utf-8-sig"))
-    dest = _unique_dir(f"{model_paths[0].stem}{'_' + label if label else ''}_{time.strftime('%Y%m%d-%H%M%S')}")
+    # output/<projet>/<variante>/<horodatage>[_plateau-N]/ : un dossier par projet, puis par variante.
+    dest = _unique_dir(model_paths[0].stem, label or "slice",
+                       time.strftime("%Y%m%d-%H%M%S") + (f"_plateau-{plate}" if plate else ""))
     produced = []
     if out_dir.is_dir():
         for f in out_dir.iterdir():
@@ -169,9 +171,14 @@ def _run_cli(args: list, work: Path, timeout_s: int) -> subprocess.CompletedProc
     return subprocess.CompletedProcess(args, proc.returncode, out, err)
 
 
-def _unique_dir(name: str) -> Path:
+def _safe(part: str) -> str:
+    """Nom utilisable comme dossier Windows."""
+    return "".join("_" if c in '<>:"/\\|?*' else c for c in part).strip(" .") or "_"
+
+
+def _unique_dir(project: str, variant: str, name: str) -> Path:
     """Dossier de sortie neuf, même pour des slices lancés dans la même seconde."""
-    base = config.output_dir()
+    base = config.output_dir() / _safe(project) / _safe(variant)
     for i in range(1000):
         dest = base / (name if i == 0 else f"{name}-{i}")
         try:

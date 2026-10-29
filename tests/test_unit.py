@@ -63,9 +63,15 @@ def test_apply_settings_unknown_and_known():
     assert norm == {"brim_type": "no_brim"} and changes[0]["before"] is None
 
 
-def test_unique_dirs_do_not_collide():
-    dirs = {slicer._unique_dir("x_20260101-000000") for _ in range(3)}
+def test_unique_dirs_do_not_collide(isolated_output):
+    dirs = {slicer._unique_dir("x", "vitesse", "20260101-000000") for _ in range(3)}
     assert len(dirs) == 3
+    assert all(d.parent == isolated_output / "x" / "vitesse" for d in dirs)
+
+
+def test_unique_dir_sanitizes_names(isolated_output):
+    d = slicer._unique_dir("a:b", "v/1", "t")
+    assert d == isolated_output / "a_b" / "v_1" / "t"
 
 
 def test_cache_roundtrip_and_invalidation(isolated_output):
