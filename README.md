@@ -1,4 +1,4 @@
-# BambuConnecteur
+# Bambu Studio Advisor - MCP
 
 **An MCP connector that gives Claude access to Bambu Studio and your Bambu Lab printer.**
 
