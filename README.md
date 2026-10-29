@@ -2,12 +2,20 @@
 
 **An MCP connector that gives Claude access to Bambu Studio and your Bambu Lab printer.**
 
+[![License: MIT](https://img.shields.io/badge/license-MIT-blue.svg)](LICENSE)
+![Python 3.10+](https://img.shields.io/badge/python-3.10%2B-blue.svg)
+![MCP server](https://img.shields.io/badge/MCP-server-8A2BE2.svg)
+
 Hand Claude an STL or 3MF file: it analyzes the part, asks which filament you use, slices several
 variants with the real Bambu Studio engine, compares time and weight, then gives you a `.3mf`
 project ready to open and print. Everything runs locally on your PC.
 
 Works with **Bambu Lab** printers (P1S, P1P, X1 Carbon, A1, A1 mini…): on first use, Claude asks for
 your printer, build plate and usual filament. Recipes are tuned on a 0.4 mm nozzle.
+
+<p align="center">
+  <img src="docs/demo.svg" alt="Claude slices a 4-plate camera case in six variants and compares time and weight" width="820">
+</p>
 
 ---
 
@@ -24,6 +32,7 @@ your printer, build plate and usual filament. Recipes are tuned on a 0.4 mm nozz
 - [Known limitations](#known-limitations)
 - [Troubleshooting](#troubleshooting)
 - [Development](#development)
+- [License](#license)
 
 ---
 
@@ -321,3 +330,8 @@ bambu_mcp/
 └── config.py      paths and config.json
 skills/3d-printing/SKILL.md   Claude Code skill
 ```
+
+## License
+
+[MIT](LICENSE): free to use, modify and share, including commercially, as long as the
+copyright notice is kept.

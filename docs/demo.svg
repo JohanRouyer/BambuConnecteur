@@ -1,0 +1,94 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="820" height="560" viewBox="0 0 820 560" font-family="-apple-system, 'Segoe UI', Helvetica, Arial, sans-serif">
+  <title>Bambu Studio Advisor - example session</title>
+  <style>
+    .bg { fill: #ffffff; stroke: #d0d7de; }
+    .bar-top { fill: #f6f8fa; }
+    .you { fill: #ddf4ff; }
+    .claude { fill: #f6f8fa; stroke: #d0d7de; }
+    .t { fill: #1f2328; }
+    .m { fill: #59636e; }
+    .h { fill: #1f2328; font-weight: 600; }
+    .rec { fill: #dafbe1; }
+    .time { fill: #8b949e; }
+    .weight { fill: #2da44e; }
+    .good { fill: #1a7f37; }
+    .bad { fill: #cf222e; }
+    .code { fill: #0550ae; font-family: Consolas, 'SFMono-Regular', Menlo, monospace; }
+    @media (prefers-color-scheme: dark) {
+      .bg { fill: #0d1117; stroke: #30363d; }
+      .bar-top { fill: #161b22; }
+      .you { fill: #0c2d6b; }
+      .claude { fill: #161b22; stroke: #30363d; }
+      .t, .h { fill: #e6edf3; }
+      .m { fill: #9198a1; }
+      .rec { fill: #12361e; }
+      .time { fill: #6e7681; }
+      .weight { fill: #3fb950; }
+      .good { fill: #3fb950; }
+      .bad { fill: #f85149; }
+      .code { fill: #79c0ff; }
+    }
+  </style>
+
+  <rect class="bg" x="0.5" y="0.5" width="819" height="559" rx="12"/>
+  <path class="bar-top" d="M12.5 0.5 H807.5 A12 12 0 0 1 819.5 12.5 V36 H0.5 V12.5 A12 12 0 0 1 12.5 0.5 Z"/>
+  <circle cx="22" cy="18" r="5.5" fill="#ff5f57"/><circle cx="40" cy="18" r="5.5" fill="#febc2e"/><circle cx="58" cy="18" r="5.5" fill="#28c840"/>
+  <text class="m" x="410" y="23" font-size="13" text-anchor="middle">Claude + Bambu Studio Advisor</text>
+
+  <!-- User message -->
+  <rect class="you" x="300" y="54" width="500" height="58" rx="10"/>
+  <text class="t" x="316" y="78" font-size="14">Here's my camera case, print it in Bambu PLA Matte black</text>
+  <text class="code" x="316" y="99" font-size="13">C:\Users\me\Downloads\case.3mf</text>
+
+  <!-- Claude answer -->
+  <rect class="claude" x="20" y="128" width="780" height="412" rx="10"/>
+  <text class="m" x="40" y="154" font-size="13">4 plates · project made for an X1C, converted to your P1S · 6 variants sliced in parallel</text>
+
+  <text class="h" x="40" y="188" font-size="14">Variant</text>
+  <text class="h" x="200" y="188" font-size="14">Time</text>
+  <text class="h" x="300" y="188" font-size="14">Weight</text>
+  <text class="h" x="410" y="188" font-size="14">vs original</text>
+  <line x1="40" y1="198" x2="780" y2="198" stroke="#8b949e" stroke-opacity="0.4"/>
+
+  <!-- rows: bars scale time to 12 h = 200 px, weight to 550 g = 140 px -->
+  <g font-size="14">
+    <text class="t" x="40" y="226">Original</text>
+    <text class="t" x="200" y="226">9 h 11</text><text class="t" x="300" y="226">459.3 g</text>
+    <text class="m" x="410" y="226">-</text>
+    <rect class="time" x="560" y="214" width="153" height="7" rx="3"/><rect class="weight" x="560" y="224" width="117" height="7" rx="3"/>
+
+    <rect class="rec" x="30" y="240" width="760" height="34" rx="6"/>
+    <text class="h" x="40" y="262">Balanced ✓</text>
+    <text class="h" x="200" y="262">9 h 32</text><text class="h" x="300" y="262">454.1 g</text>
+    <text class="m" x="410" y="262">+0 h 21 · -5.2 g</text>
+    <rect class="time" x="560" y="250" width="159" height="7" rx="3"/><rect class="weight" x="560" y="260" width="116" height="7" rx="3"/>
+
+    <text class="t" x="40" y="298">Quality</text>
+    <text class="t" x="200" y="298">10 h 53</text><text class="t" x="300" y="298">455.6 g</text>
+    <text class="m" x="410" y="298">+1 h 42 · -3.8 g</text>
+    <rect class="time" x="560" y="286" width="181" height="7" rx="3"/><rect class="weight" x="560" y="296" width="116" height="7" rx="3"/>
+
+    <text class="t" x="40" y="334">Speed</text>
+    <text class="t" x="200" y="334">7 h 29</text><text class="t" x="300" y="334">379.4 g</text>
+    <text class="good" x="410" y="334">-1 h 42 · -79.9 g</text>
+    <rect class="time" x="560" y="322" width="125" height="7" rx="3"/><rect class="weight" x="560" y="332" width="97" height="7" rx="3"/>
+
+    <text class="t" x="40" y="370">Light</text>
+    <text class="t" x="200" y="370">7 h 43</text><text class="t" x="300" y="370">377.2 g</text>
+    <text class="good" x="410" y="370">-1 h 28 · -82.1 g</text>
+    <rect class="time" x="560" y="358" width="129" height="7" rx="3"/><rect class="weight" x="560" y="368" width="96" height="7" rx="3"/>
+
+    <text class="t" x="40" y="406">Strength</text>
+    <text class="t" x="200" y="406">10 h 41</text><text class="t" x="300" y="406">524.7 g</text>
+    <text class="bad" x="410" y="406">+1 h 30 · +65.4 g</text>
+    <rect class="time" x="560" y="394" width="178" height="7" rx="3"/><rect class="weight" x="560" y="404" width="134" height="7" rx="3"/>
+  </g>
+  <rect class="time" x="560" y="424" width="10" height="7" rx="3"/><text class="m" x="576" y="431" font-size="12">time</text>
+  <rect class="weight" x="620" y="424" width="10" height="7" rx="3"/><text class="m" x="636" y="431" font-size="12">weight</text>
+
+  <line x1="40" y1="446" x2="780" y2="446" stroke="#8b949e" stroke-opacity="0.4"/>
+  <text class="t" x="40" y="472" font-size="14">✅ Balanced: tuned speeds and accelerations, about the same time and weight as the original.</text>
+  <text class="t" x="40" y="496" font-size="14">⚠️ Filament max flow (22 mm³/s) caps inner wall speed: the filament is the limit.</text>
+  <text class="t" x="40" y="522" font-size="14">📁 Ready to print:</text>
+  <text class="code" x="170" y="522" font-size="13">output\case\balanced\…\result.3mf</text>
+</svg>
