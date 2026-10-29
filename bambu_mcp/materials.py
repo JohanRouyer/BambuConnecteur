@@ -1,5 +1,10 @@
-"""Conseils matériaux pour la P1S (buse acier inox 0.4 d'origine, caisson fermé non chauffé)."""
-from . import presets
+"""Conseils matériaux (calibrés sur P1S : buse acier inox 0.4 d'origine, caisson fermé non chauffé)."""
+from . import config, presets
+
+# Plateaux Bambu (noms de la CLI) -> réglage de température du filament.
+BED_TYPES = {"Textured PEI Plate": "textured_plate_temp", "Cool Plate": "cool_plate_temp",
+             "Engineering Plate": "eng_plate_temp", "High Temp Plate": "hot_plate_temp",
+             "Supertack Plate": "supertack_plate_temp"}
 
 # plate : plateaux conseillés, du meilleur au moins bon (noms de la CLI Bambu Studio).
 MATERIALS = {
@@ -61,16 +66,13 @@ def guide(material: str | None = None, filament: str | None = None) -> dict:
     if not material:
         return {"materials": {k: v["filament"] for k, v in MATERIALS.items()}}
     name, info = find(material)
-    preset = filament or info["filament"]
+    preset = filament or presets.for_machine("filament", info["filament"], config.default_machine())
     cfg = presets.resolve("filament", preset)
     first = lambda k: (cfg.get(k) or [None])[0] if isinstance(cfg.get(k), list) else cfg.get(k)  # noqa: E731
     out = {"material": name, "filament_preset": preset, "plates": info["plate"], "enclosure": info["enclosure"],
            "ams_ok": info["ams"], "nozzle_c": first("nozzle_temperature"),
            # 0 °C = plateau non prévu pour ce filament.
-           "bed_c": {p: t for p, t in {"Textured PEI Plate": first("textured_plate_temp"),
-                                       "Cool Plate": first("cool_plate_temp"),
-                                       "Engineering Plate": first("eng_plate_temp"),
-                                       "High Temp Plate": first("hot_plate_temp")}.items() if t and t != "0"},
+           "bed_c": {p: t for p, t in ((p, first(k)) for p, k in BED_TYPES.items()) if t and t != "0"},
            "max_volumetric_mm3_s": first("filament_max_volumetric_speed"),
            "fan_pct": [first("fan_min_speed"), first("fan_max_speed")], "notes": list(info["notes"])}
     if info.get("abrasive"):

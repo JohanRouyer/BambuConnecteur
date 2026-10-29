@@ -3,7 +3,7 @@ import asyncio
 
 import pytest
 
-from bambu_mcp import analysis, config, history, materials, prepare, server, slicer, threemf
+from bambu_mcp import analysis, config, defaults, geometry, history, materials, prepare, server, slicer, threemf
 from conftest import box, funnel, needs_bambu, write_stl
 
 pytestmark = needs_bambu
@@ -122,6 +122,34 @@ def test_prepare_as_is_adds_supports_and_nozzle_warning(tmp_path):
     assert r["ok"]
     assert r["settings"]["enable_support"] == "1"
     assert any("acier trempé" in w for w in r["warnings"])
+
+
+def test_first_use_setup_adapts_everything_to_the_printer(isolated_config):
+    isolated_config.write_text('{"printer": {"host": "1.2.3.4"}}', encoding="utf-8")
+    assert defaults.current()["setup_needed"]
+    assert "Bambu Lab A1 mini 0.4 nozzle" in defaults.options()["machines"]
+    r = defaults.configure("bambu lab a1 mini 0.4 nozzle", "cool plate", "PLA Matte")
+    assert not r["setup_needed"]
+    assert r["machine"] == "Bambu Lab A1 mini 0.4 nozzle" and r["process"] == "0.20mm Standard @BBL A1M"
+    assert r["bed_type"] == "Cool Plate" and r["filament"] == "Bambu PLA Matte @BBL A1M"
+    assert config.printer() == {"host": "1.2.3.4"}  # Le reste de config.json est gardé.
+    assert geometry.bed() == (180, 180, 180)
+    assert materials.guide("PETG")["filament_preset"].endswith("@BBL A1M")
+    # Changer d'imprimante fait suivre le filament enregistré.
+    assert defaults.configure("Bambu Lab P1S 0.4 nozzle")["filament"] == "Bambu PLA Matte @BBL P1S 0.4 nozzle"
+
+
+def test_setup_rejects_unknown_values():
+    with pytest.raises(KeyError, match="A1"):
+        defaults.configure(machine="Bambu Lab A1 0.4 nozle")
+    with pytest.raises(ValueError, match="Textured PEI Plate"):
+        defaults.configure(bed_type="Plateau magique")
+
+
+def test_recipe_accelerations_fit_the_printer():
+    a1 = slicer.fit_machine(slicer.GOALS["vitesse"], "Bambu Lab A1 0.4 nozzle")  # 12 000 max
+    assert a1["default_acceleration"] == "9000" and a1["top_surface_acceleration"] == "3000"
+    assert slicer.fit_machine(slicer.GOALS["vitesse"], MACHINE) == slicer.GOALS["vitesse"]
 
 
 def test_material_guide_every_material():

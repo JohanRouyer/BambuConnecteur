@@ -18,12 +18,26 @@ def load() -> dict:
     return {}
 
 
+def save(updates: dict) -> None:
+    """Fusionne `updates` dans config.json (les autres clés, dont `printer`, sont gardées)."""
+    CONFIG_FILE.write_text(json.dumps({**load(), **updates}, indent=4, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def setup_needed() -> bool:
+    """Première utilisation : l'imprimante par défaut n'a pas encore été choisie."""
+    return not load().get("default_machine")
+
+
 def default_machine() -> str:
     return load().get("default_machine") or DEFAULT_MACHINE
 
 
 def default_process() -> str:
     return load().get("default_process") or DEFAULT_PROCESS
+
+
+def default_filament() -> str | None:
+    return load().get("default_filament")
 
 
 def install_dir() -> Path:

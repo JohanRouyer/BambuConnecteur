@@ -5,7 +5,7 @@ from typing import Literal
 from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
-from . import analysis, config, geometry, history, materials, prepare, presets, printer, slicer, threemf
+from . import analysis, config, defaults, geometry, history, materials, prepare, presets, printer, slicer, threemf
 
 Kind = Literal["process", "filament", "machine"]
 EXPECTED_ERRORS = (KeyError, ValueError, OSError, TimeoutError, RecursionError)
@@ -32,8 +32,9 @@ class _Server(MCPServer):
 mcp = _Server(
     "bambu-studio",
     instructions=(
-        "Accès local à Bambu Studio (P1S). Les valeurs de réglage sont des chaînes Bambu "
-        "(\"0.2\", \"15%\", \"1\"/\"0\") ; une valeur simple est recopiée sur toutes les variantes. "
+        "Accès local à Bambu Studio et à l'imprimante par défaut de l'utilisateur (P1S si rien n'est "
+        "réglé ; première utilisation : connector_info.setup_needed, puis setup_defaults). "
+        "Les valeurs de réglage sont des chaînes Bambu (\"0.2\", \"15%\", \"1\"/\"0\") ; une valeur simple est recopiée sur toutes les variantes. "
         "Méthode conseillée : lire le preset ou le projet, proposer les changements, slicer pour "
         "comparer temps et poids, puis seulement enregistrer. Bambu Studio doit être redémarré "
         "pour voir un preset modifié. L'outil imprimante est en lecture seule."
@@ -105,9 +106,9 @@ def slice_model(models: list[str], machine: str | None = None, process: str | No
                 bed_type: str | None = None, orient: bool = False, arrange: bool = False) -> dict:
     """Slice avec Bambu Studio et renvoie temps, poids, temps par type de ligne et avertissements.
     Sans presets, un 3MF Bambu garde ses propres réglages, et les overrides s'y appliquent
-    (l'original n'est pas modifié) ; un projet fait pour une autre imprimante passe sur la P1S.
+    (l'original n'est pas modifié) ; un projet fait pour une autre imprimante passe sur l'imprimante par défaut.
     Un STL ou un 3MF « géométrie seule » devient un projet Bambu complet (result.3mf), avec
-    `machine` (+ process, filaments) ou à défaut P1S / 0.20mm Standard / PLA.
+    `machine` (+ process, filaments) ou à défaut les presets par défaut (setup_defaults).
     `filaments` seul sur un projet : remplace son filament, réglages d'impression du projet gardés.
     `plate` 0 = tous les plateaux dans un seul result.3mf. `bed_type` ex. "Textured PEI Plate"."""
     return slicer.run(models, machine, process, filaments, process_overrides, filament_overrides,
@@ -121,7 +122,7 @@ def compare_slices(models: list[str], variants: dict[str, dict], include_origina
                    bed_type: str | None = None) -> dict:
     """Slice plusieurs variantes EN PARALLÈLE en un seul appel : {nom: {réglage: valeur}}.
     Renvoie temps, poids (total et par plateau), écart en % avec l'original et contrôles de chaque variante.
-    Sur un 3MF sans `machine`, les réglages s'appliquent au projet, passé sur la P1S (l'original
+    Sur un 3MF sans `machine`, les réglages s'appliquent au projet, passé sur l'imprimante par défaut (l'original
     n'est pas modifié). `filaments` seul : filament du projet remplacé (preset, ex. via material_guide).
     `plate` 0 = tous les plateaux dans un seul result.3mf par variante."""
     return slicer.compare(models, variants, include_original, machine, process, filaments, plate, bed_type)
@@ -132,7 +133,7 @@ def optimize(models: list[str], goal: Literal["qualite", "equilibre", "vitesse",
              machine: str | None = None, process: str | None = None,
              filaments: list[str] | None = None, plate: int = 0, bed_type: str | None = None,
              compare_all: bool = True) -> dict:
-    """Recettes P1S prêtes à l'emploi : slice l'original et les 5 objectifs en parallèle,
+    """Recettes prêtes à l'emploi (accélérations ramenées aux limites de l'imprimante) : slice l'original et les 5 objectifs en parallèle,
     puis désigne la variante de `goal`. `compare_all` false : seulement l'original et `goal`.
     Laisser `plate` à 0 : un seul result.3mf par variante avec tous les plateaux, détail par plateau inclus.
     `filaments` (preset, ex. celui de material_guide) : filament choisi par l'utilisateur, appliqué au projet."""
@@ -148,14 +149,14 @@ def check_settings(path: str) -> dict:
 
 @mcp.tool()
 def analyze_model(path: str) -> dict:
-    """Géométrie d'un STL ou 3MF : dimensions, volume, tient-il sur la P1S, assise, surplombs
+    """Géométrie d'un STL ou 3MF : dimensions, volume, tient-il sur l'imprimante par défaut, assise, surplombs
     et ponts pour 6 orientations, meilleure orientation et conseils (supports, bordure)."""
     return geometry.analyze(path)
 
 
 @mcp.tool()
 def material_guide(material: str | None = None, filament: str | None = None) -> dict:
-    """Conseils P1S par matériau (PLA, PETG, ABS, ASA, PC, TPU, PA-CF, …) : preset filament,
+    """Conseils par matériau (PLA, PETG, ABS, ASA, PC, TPU, PA-CF, …) : preset filament de l'imprimante par défaut,
     plateaux et températures, capot / porte, AMS, buse, séchage. Sans `material` : la liste."""
     return materials.guide(material, filament)
 
@@ -166,7 +167,7 @@ def prepare_print(models: list[str], material: str = "PLA",
                   copies: int = 1, orientation: Literal["auto", "as_is"] = "auto",
                   supports: Literal["auto", "on", "off"] = "auto", bed_type: str | None = None,
                   filament: str | None = None, extra_settings: dict | None = None) -> dict:
-    """De STL / 3MF à projet P1S prêt à imprimer en un appel : analyse, meilleure orientation,
+    """De STL / 3MF à projet prêt à imprimer en un appel : analyse, meilleure orientation,
     presets du matériau, plateau, supports et bordure si nécessaires, copies disposées, slice.
     Renvoie temps, poids, décisions prises, avertissements et le result.3mf à ouvrir dans Bambu Studio."""
     return prepare.prepare(models, material, goal, copies, orientation, supports, bed_type,
@@ -182,15 +183,30 @@ def slice_history(limit: int = 20, search: str | None = None) -> list[dict]:
 
 @mcp.tool()
 def printer_status(include_raw: bool = False) -> dict:
-    """État de la P1S en réseau local : impression, températures, ventilateurs, AMS, erreurs HMS."""
+    """État de l'imprimante en réseau local : impression, températures, ventilateurs, AMS, erreurs HMS."""
     return printer.status(include_raw=include_raw)
 
 
 @mcp.tool()
+def setup_defaults(machine: str | None = None, bed_type: str | None = None,
+                   filament: str | None = None) -> dict:
+    """Valeurs par défaut de l'utilisateur, à régler à la première utilisation (`setup_needed`).
+    Sans argument : valeurs actuelles et choix possibles (imprimantes, plateaux).
+    Avec arguments : les valide et les enregistre. `machine` : preset machine exact
+    (ex. "Bambu Lab A1 0.4 nozzle", le process standard suit). `filament` : preset ou matériau
+    (ex. "PLA Matte"), adapté à l'imprimante."""
+    if not (machine or bed_type or filament):
+        return {**defaults.current(), "options": defaults.options()}
+    return defaults.configure(machine, bed_type, filament)
+
+
+@mcp.tool()
 def connector_info() -> dict:
-    """Chemins utilisés par le connecteur et état de la configuration."""
+    """Chemins utilisés par le connecteur et état de la configuration. `setup_needed` true :
+    première utilisation, demander l'imprimante, le plateau et le filament puis appeler setup_defaults."""
     p = config.printer()
-    return {"bambu_studio": str(config.executable()), "exists": config.executable().exists(),
+    return {"setup_needed": config.setup_needed(), "defaults": defaults.current(),
+            "bambu_studio": str(config.executable()), "exists": config.executable().exists(),
             "user_presets": str(config.user_presets_dir()), "output_dir": str(config.output_dir()),
             "config_file": str(config.CONFIG_FILE),
             "printer_configured": all(p.get(k) for k in ("host", "serial", "access_code")),

@@ -1,4 +1,4 @@
-"""Préparation complète d'une impression P1S : STL ou 3MF + matériau + objectif -> projet slicé."""
+"""Préparation complète d'une impression : STL ou 3MF + matériau + objectif -> projet slicé pour l'imprimante par défaut."""
 import shutil
 import tempfile
 from pathlib import Path
@@ -39,9 +39,9 @@ def prepare(models: list[str], material: str = "PLA", goal: str = "equilibre", c
                     orient_3mf = True
                 decisions.append(f"{Path(model).name} : {chosen['orientation']} "
                                  f"(surplombs {a['current']['overhang_pct']} % → {chosen['overhang_pct']} %).")
-            if not chosen["fits_p1s"]:
-                raise ValueError(f"{Path(model).name} ne tient pas sur la P1S ({chosen['size_mm']} mm, "
-                                 "max 256 x 256 x 250) : réduire l'échelle ou découper.")
+            if not chosen["fits_bed"]:
+                raise ValueError(f"{Path(model).name} ne tient pas sur l'imprimante ({chosen['size_mm']} mm, "
+                                 f"max {' x '.join(f'{b:g}' for b in a['bed_mm'])}) : réduire l'échelle ou découper.")
             needs_support |= chosen["needs_support"]
             w, d, h = chosen["size_mm"]
             needs_brim |= chosen["base_area_mm2"] < 50 or (min(w, d) > 0 and h / min(w, d) > 4)
@@ -52,7 +52,8 @@ def prepare(models: list[str], material: str = "PLA", goal: str = "equilibre", c
                 raise ValueError("copies > 1 : seulement avec des STL (dupliquer les objets dans Bambu Studio pour un 3MF).")
             inputs += [str(path)] * copies
 
-        settings = dict(slicer.GOALS[goal])
+        machine, process = config.default_machine(), config.default_process()
+        settings = slicer.fit_machine(slicer.GOALS[goal], machine)
         if supports == "on" or (supports == "auto" and needs_support):
             settings.update({"enable_support": "1", "support_type": "tree(auto)"})
             decisions.append("Supports arborescents activés" + (" (surplombs détectés)." if supports == "auto" else "."))
@@ -64,9 +65,11 @@ def prepare(models: list[str], material: str = "PLA", goal: str = "equilibre", c
                                                       else "petite assise ou pièce haute") + ").")
         settings.update(extra_settings or {})
 
-        plate = bed_type or next((p for p in mat["plate"] if (guide["bed_c"].get(p) or "0") != "0"), None)
+        # Plateau demandé, sinon celui de l'utilisateur s'il convient au filament, sinon le conseillé.
+        usual = config.load().get("default_bed_type")
+        plate = bed_type or (usual if usual in guide["bed_c"] else None) or next(
+            (p for p in mat["plate"] if p in guide["bed_c"]), None)
         decisions.append(f"Plateau : {plate} ({guide['bed_c'].get(plate)} °C).")
-        machine, process = config.default_machine(), config.default_process()
         proc, fil = slicer._split(settings, machine, process, [filament])
         result = slicer.run(inputs, machine, process, [filament], proc, fil or None, 0, plate,
                             orient=orient_3mf, arrange=len(inputs) > 1 or any(i.lower().endswith(".stl") for i in inputs),

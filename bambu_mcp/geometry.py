@@ -1,4 +1,4 @@
-"""Géométrie des modèles (STL, 3MF) : taille, volume, surplombs, meilleure orientation sur la P1S."""
+"""Géométrie des modèles (STL, 3MF) : taille, volume, surplombs, meilleure orientation sur l'imprimante."""
 import re
 import struct
 import zipfile
@@ -6,10 +6,12 @@ from pathlib import Path
 
 import numpy as np
 
-# Volume imprimable de la P1S (printable_area 256 x 256, printable_height 250).
+from . import config, presets
+
+# Volume imprimable de repli (P1S) quand le preset de l'imprimante est illisible.
 BED = (256.0, 256.0, 250.0)
 # Une face tournée vers le bas à plus de 60° de la verticale demande en général un support ;
-# entre 45 et 60° la P1S s'en sort avec un bon refroidissement. Les faces horizontales sont des ponts.
+# entre 45 et 60° une Bambu s'en sort avec un bon refroidissement. Les faces horizontales sont des ponts.
 OVERHANG_ANGLE = 60
 BRIDGE_NZ = -0.985
 
@@ -18,6 +20,16 @@ ORIENTATIONS = {
     "tel quel": (0, 0), "retourné": (180, 0), "basculé vers l'avant": (90, 0),
     "basculé vers l'arrière": (-90, 0), "couché à gauche": (0, 90), "couché à droite": (0, -90),
 }
+
+
+def bed() -> tuple[float, float, float]:
+    """Volume imprimable (X, Y, Z en mm) de l'imprimante par défaut, lu dans son preset."""
+    try:
+        cfg = presets.resolve("machine", config.default_machine())
+        xs, ys = zip(*(map(float, corner.split("x")) for corner in cfg["printable_area"]))
+        return max(xs) - min(xs), max(ys) - min(ys), float(cfg["printable_height"])
+    except (KeyError, ValueError, OSError):
+        return BED
 
 
 def _rotation(rx: float, ry: float) -> np.ndarray:
@@ -137,11 +149,13 @@ def analyze(path: str) -> dict:
     tris = load(path)
     tris = tris - tris.reshape(-1, 3).mean(axis=0)
     volume = abs(float(np.einsum("ij,ij->i", tris[:, 0], np.cross(tris[:, 1], tris[:, 2])).sum()) / 6)
+    volume_mm = bed()
     rows = []
     for name, (rx, ry) in ORIENTATIONS.items():
         m = _metrics(tris @ _rotation(rx, ry).T)
-        fits = all(s <= b for s, b in zip(sorted(m["size_mm"][:2]), sorted(BED[:2]))) and m["size_mm"][2] <= BED[2]
-        rows.append({"orientation": name, "rotate_x": rx, "rotate_y": ry, **m, "fits_p1s": fits})
+        fits = (all(s <= b for s, b in zip(sorted(m["size_mm"][:2]), sorted(volume_mm[:2])))
+                and m["size_mm"][2] <= volume_mm[2])
+        rows.append({"orientation": name, "rotate_x": rx, "rotate_y": ry, **m, "fits_bed": fits})
     surface = rows[0]["surface_mm2"]
     for r in rows:
         r.pop("surface_mm2")
@@ -149,12 +163,13 @@ def analyze(path: str) -> dict:
         r["bridge_pct"] = round(100 * r["bridge_area_mm2"] / surface, 1) if surface else 0
         r["needs_support"] = r["overhang_pct"] > 2
     # Moins de surplombs (les ponts comptent à moitié), puis meilleure assise, puis moins haut.
-    best = min((r for r in rows if r["fits_p1s"]), default=rows[0],
+    best = min((r for r in rows if r["fits_bed"]), default=rows[0],
                key=lambda r: (round(r["overhang_pct"] + r["bridge_pct"] / 2), -r["base_area_mm2"], r["size_mm"][2]))
     current = rows[0]
     advice = []
-    if not current["fits_p1s"]:
-        advice.append("Trop grand pour la P1S tel quel (256 x 256 x 250 mm) : réorienter, réduire ou découper.")
+    if not current["fits_bed"]:
+        advice.append(f"Trop grand pour l'imprimante tel quel ({' x '.join(f'{b:g}' for b in volume_mm)} mm) : "
+                      "réorienter, réduire ou découper.")
     if current["needs_support"]:
         advice.append(f"{current['overhang_pct']} % de la surface en surplomb à plus de {OVERHANG_ANGLE}° : "
                       "supports probablement nécessaires (vérifier les avertissements du slicer).")
@@ -168,7 +183,8 @@ def analyze(path: str) -> dict:
         advice.append("Pièce haute et fine : bordure conseillée, vitesse réduite en haut.")
     if best is not current:
         advice.append(f"Meilleure orientation estimée : « {best['orientation']} ».")
-    return {"file": path, "triangles": int(len(tris)), "volume_cm3": round(volume / 1000, 2),
+    return {"file": path, "machine": config.default_machine(), "bed_mm": list(volume_mm),
+            "triangles": int(len(tris)), "volume_cm3": round(volume / 1000, 2),
             "solid_weight_pla_g": round(volume / 1000 * 1.24, 1), "current": current,
             "best_orientation": best["orientation"], "orientations": rows, "advice": advice,
             "note": "Estimation géométrique : les ponts et petits surplombs passent souvent sans support."}

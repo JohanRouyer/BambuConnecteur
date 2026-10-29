@@ -1,4 +1,5 @@
-"""Outils communs : maillages de test générés à la volée, dossier de sortie isolé."""
+"""Outils communs : maillages de test générés à la volée, config et dossier de sortie isolés."""
+import json
 import struct
 import sys
 import zipfile
@@ -88,6 +89,16 @@ def write_3mf(tris: np.ndarray, path: Path, transform: str = "1 0 0 0 1 0 0 0 1 
             obj, oid = f'<object id="1" type="model">{mesh}</object>', 1
         z.writestr("3D/3dmodel.model", f'<model {ns}><resources>{obj}</resources>'
                                        f'<build><item objectid="{oid}" transform="{transform}"/></build></model>')
+    return path
+
+
+@pytest.fixture(autouse=True)
+def isolated_config(tmp_path, monkeypatch):
+    """config.json de test : chemins de l'utilisateur gardés, valeurs par défaut retirées (P1S)."""
+    real = {k: v for k, v in config.load().items() if not k.startswith("default_")}
+    path = tmp_path / "config.json"
+    path.write_text(json.dumps(real), encoding="utf-8")
+    monkeypatch.setattr(config, "CONFIG_FILE", path)
     return path
 
 

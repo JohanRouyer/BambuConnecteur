@@ -13,21 +13,21 @@ def test_stl_cube(tmp_path, ascii):
     assert a["current"]["size_mm"] == [10, 20, 30]
     assert a["current"]["base_area_mm2"] == pytest.approx(200)
     assert a["current"]["overhang_pct"] == 0 and not a["current"]["needs_support"]
-    assert a["current"]["fits_p1s"]
+    assert a["current"]["fits_bed"]
 
 
 def test_too_big_for_p1s(tmp_path):
     a = geometry.analyze(str(write_stl(box(300, 300, 300), tmp_path / "big.stl")))
-    assert not any(r["fits_p1s"] for r in a["orientations"])
+    assert not any(r["fits_bed"] for r in a["orientations"])
     assert any("Trop grand" in x for x in a["advice"])
 
 
 def test_tall_part_fits_lying_down(tmp_path):
     # 252 mm : trop haut debout (max 250) mais tient couché (plateau 256).
     a = geometry.analyze(str(write_stl(box(20, 20, 252), tmp_path / "tall.stl")))
-    assert not a["current"]["fits_p1s"]
+    assert not a["current"]["fits_bed"]
     best = next(r for r in a["orientations"] if r["orientation"] == a["best_orientation"])
-    assert best["fits_p1s"] and best["size_mm"][2] == 20
+    assert best["fits_bed"] and best["size_mm"][2] == 20
 
 
 def test_overhang_and_best_orientation(tmp_path):

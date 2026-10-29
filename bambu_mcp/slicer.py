@@ -28,11 +28,20 @@ def _flatten(kind: str, name: str, overrides: dict | None, dest: Path) -> list:
 
 def _default_presets(models: list[str], machine: str | None, process: str | None,
                      filaments: list[str] | None) -> tuple:
-    """STL ou 3MF géométrie seule sans presets : P1S, process standard et PLA par défaut."""
+    """STL ou 3MF géométrie seule sans presets : imprimante, process et filament par défaut (PLA à défaut)."""
     if machine or all(threemf.is_project(m) for m in models):
         return machine, process, filaments
-    return (config.default_machine(), config.default_process(),
-            filaments or [materials.MATERIALS["PLA"]["filament"]])
+    machine = config.default_machine()
+    return machine, config.default_process(), filaments or [
+        config.default_filament() or presets.for_machine("filament", materials.MATERIALS["PLA"]["filament"], machine)]
+
+
+def fit_machine(settings: dict, machine: str) -> dict:
+    """Ramène les accélérations d'une recette à 75 % du maximum de l'imprimante (A1 : 12 000)."""
+    limit = presets.resolve("machine", machine).get("machine_max_acceleration_extruding") or ["20000"]
+    cap = int(float(limit[0] if isinstance(limit, list) else limit) * 0.75)
+    return {k: (str(min(int(v), cap)) if k.endswith("_acceleration") and v.isdigit() else v)
+            for k, v in settings.items()}
 
 
 def _filament_slots(models: list[Path]) -> int:
@@ -350,7 +359,8 @@ def optimize(models: list[str], goal: str, machine: str | None = None, process: 
     """Applique la recette de `goal` (et, si compare_all, les autres) puis désigne la variante conseillée."""
     if goal not in GOALS:
         raise ValueError(f"Objectif inconnu {goal!r} : {list(GOALS)}")
-    chosen = GOALS if compare_all else {goal: GOALS[goal]}
+    target = machine or config.default_machine()
+    chosen = {name: fit_machine(recipe, target) for name, recipe in GOALS.items() if compare_all or name == goal}
     result = compare(models, chosen, True, machine, process, filaments, plate, bed_type)
     best = next(r for r in result["variants"] if r["name"] == goal)
     # Vitesse et légèreté se mesurent : la recette ne bat pas toujours un projet déjà poussé.

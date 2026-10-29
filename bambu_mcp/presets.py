@@ -135,6 +135,34 @@ def is_compatible(kind: str, name: str, printer: str) -> bool:
     return not compat or printer in compat
 
 
+def canonical(kind: str, name: str) -> str:
+    """Nom exact d'un preset (la recherche tolère les écarts de casse)."""
+    _, _, data = find(kind, name)
+    return data.get("name") or name
+
+
+def standard_process(machine: str) -> str:
+    """Process « 0.20mm Standard » de l'imprimante (repli : son premier process système)."""
+    names = [r["name"] for r in list_presets("process", "system", machine)]
+    if not names:
+        raise KeyError(f"Aucun process système compatible avec {machine!r}.")
+    return next((n for n in names if n.startswith("0.20mm Standard")), names[0])
+
+
+def for_machine(kind: str, name: str, machine: str) -> str:
+    """Variante d'un preset système pour `machine` : « Bambu PLA Basic @BBL P1S 0.4 nozzle » devient
+    « Bambu PLA Basic @BBL A1 » sur une A1. Un preset déjà compatible est rendu tel quel."""
+    name = canonical(kind, name)
+    if is_compatible(kind, name, machine):
+        return name
+    base = name.split(" @")[0]
+    match = next((r["name"] for r in list_presets(kind, "system", machine, base)
+                  if r["name"].split(" @")[0] == base), None)
+    if not match:
+        raise KeyError(f"Pas de version de {name!r} pour {machine!r}.")
+    return match
+
+
 def list_presets(kind: str, source: str = "all", printer: str | None = None,
                  search: str | None = None) -> list[dict]:
     _check_type(kind)
