@@ -63,6 +63,18 @@ Le code d'accès donne le contrôle local de l'imprimante : ce fichier doit rest
 - `edit_3mf` n'écrase jamais l'original, sauf si on lui donne le même chemin en sortie (une copie `.backup` est alors faite).
 - Le connecteur ne lance jamais d'impression : tu ouvres le 3MF produit dans Bambu Studio et tu imprimes toi-même.
 
+## Skill « impression-3d »
+
+[skills/impression-3d/SKILL.md](skills/impression-3d/SKILL.md) fait utiliser le connecteur
+automatiquement dès qu'on parle d'impression 3D ou qu'on donne un fichier STL / 3MF, et rendre un
+résumé complet (pièce, matériau, temps, poids, variantes, recommandation, fichier prêt). Il est
+installé dans `%USERPROFILE%\.claude\skills\impression-3d\`. Après une modification dans le dépôt,
+recopier le fichier :
+
+```bash
+cp skills/impression-3d/SKILL.md ~/.claude/skills/impression-3d/SKILL.md
+```
+
 ## Installation dans Claude Code
 
 Déjà fait sur ce PC : le serveur `bambu-studio` est déclaré dans `%USERPROFILE%\.claude.json`
