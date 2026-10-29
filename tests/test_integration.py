@@ -137,6 +137,14 @@ def test_first_use_setup_adapts_everything_to_the_printer(isolated_config):
     assert materials.guide("PETG")["filament_preset"].endswith("@BBL A1M")
     # Changing printer makes the saved filament follow.
     assert defaults.configure("Bambu Lab P1S 0.4 nozzle")["filament"] == "Bambu PLA Matte @BBL P1S 0.4 nozzle"
+    # The bare name offered by the setup question works too.
+    assert defaults.configure(filament="Bambu PETG HF")["filament"] == "Bambu PETG HF @BBL P1S 0.4 nozzle"
+
+
+def test_usual_plate_only_when_the_filament_suits_it(isolated_config):
+    defaults.configure(bed_type="Cool Plate")
+    assert slicer._bed_type(None, ["Bambu PLA Matte @BBL P1S 0.4 nozzle"]) == "Cool Plate"
+    assert slicer._bed_type(None, ["Bambu PETG HF @BBL P1S 0.4 nozzle"]) == "Textured PEI Plate"
 
 
 def test_setup_rejects_unknown_values():

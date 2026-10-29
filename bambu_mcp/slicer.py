@@ -54,6 +54,29 @@ def _filament_slots(models: list[Path]) -> int:
     return slots
 
 
+def _bed_type(project: Path | None, filaments: list[str] | None) -> str | None:
+    """Build plate to slice on: a project keeps its own unless the loaded filaments cannot use it;
+    otherwise the usual plate if they suit it, else the first one they suit (0 °C = not supported)."""
+    usual = config.load().get("default_bed_type")
+    if not filaments:
+        return None if project else usual
+    supported = set(materials.BED_TYPES)
+    for name in set(filaments):
+        cfg = presets.resolve("filament", name)
+        supported &= {plate for plate, key in materials.BED_TYPES.items()
+                      if analysis._num(cfg.get(key))}
+    if project:
+        try:
+            current = threemf.get_settings(str(project), "curr_bed_type").get("curr_bed_type")
+        except (ValueError, KeyError, zipfile.BadZipFile):
+            current = None
+        if current in supported:
+            return None
+    if usual in supported or not supported:
+        return usual
+    return next(p for p in materials.BED_TYPES if p in supported)
+
+
 def run(models: list[str], machine: str | None = None, process: str | None = None,
         filaments: list[str] | None = None, process_overrides: dict | None = None,
         filament_overrides: dict | None = None, plate: int = 0,
@@ -105,7 +128,7 @@ def run(models: list[str], machine: str | None = None, process: str | None = Non
         args += ["--load-filaments", ";".join(names)]
     # Always slice: without --slice, the CLI refuses to export the 3MF (code -13).
     args += ["--slice", str(plate)]
-    bed_type = bed_type or config.load().get("default_bed_type")
+    bed_type = bed_type or _bed_type(None if machine else model_paths[0], filaments)
     if bed_type:
         args += ["--curr-bed-type", bed_type]
     if orient:

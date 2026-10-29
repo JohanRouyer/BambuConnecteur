@@ -151,10 +151,16 @@ def standard_process(machine: str) -> str:
 
 def for_machine(kind: str, name: str, machine: str) -> str:
     """Variant of a system preset for `machine`: "Bambu PLA Basic @BBL P1S 0.4 nozzle" becomes
-    "Bambu PLA Basic @BBL A1" on an A1. A preset that is already compatible is returned as is."""
-    name = canonical(kind, name)
-    if is_compatible(kind, name, machine):
-        return name
+    "Bambu PLA Basic @BBL A1" on an A1. A preset that is already compatible is returned as is.
+    A bare base name ("Bambu PLA Basic") is accepted too."""
+    try:
+        name = canonical(kind, name)
+    except KeyError:
+        if " @" in name:
+            raise
+    else:
+        if is_compatible(kind, name, machine):
+            return name
     base = name.split(" @")[0]
     match = next((r["name"] for r in list_presets(kind, "system", machine, base)
                   if r["name"].split(" @")[0] == base), None)
