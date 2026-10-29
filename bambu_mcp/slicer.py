@@ -233,21 +233,33 @@ def _cache_put(key: str, summary: dict) -> None:
 
 
 # Recettes pour une P1S buse 0.4, appliquées par-dessus les réglages du projet ou du preset.
+# Le débit max du filament plafonne déjà les vitesses (15-21 mm³/s en PLA) : on joue surtout sur les
+# accélérations, en restant loin des 20 000 mm/s² de la P1S. Base 0.20mm Standard : 10 000 par défaut,
+# 5 000 sur le mur extérieur, 2 000 sur le dessus.
 GOALS = {
-    "qualite": {"layer_height": "0.16", "initial_layer_print_height": "0.2", "outer_wall_speed": "200",
-                "outer_wall_acceleration": "5000", "outer_wall_line_width": "0.42", "top_surface_speed": "200",
-                "top_surface_acceleration": "5000", "top_surface_line_width": "0.42", "seam_position": "aligned",
-                "enable_overhang_speed": "1", "slow_down_layer_time": "6"},
-    "equilibre": {"layer_height": "0.2", "initial_layer_print_height": "0.2", "outer_wall_speed": "250",
-                  "outer_wall_acceleration": "6000", "outer_wall_line_width": "0.42",
-                  "top_surface_line_width": "0.42", "seam_position": "aligned", "enable_overhang_speed": "1",
+    # Mur extérieur et dessus plus doux pour la finition.
+    "qualite": {"layer_height": "0.16", "initial_layer_print_height": "0.2", "outer_wall_speed": "150",
+                "outer_wall_acceleration": "3000", "outer_wall_line_width": "0.42", "inner_wall_speed": "250",
+                "top_surface_speed": "150", "top_surface_acceleration": "1500", "top_surface_line_width": "0.42",
+                "default_acceleration": "8000", "seam_position": "aligned", "enable_overhang_speed": "1",
+                "slow_down_layer_time": "6"},
+    "equilibre": {"layer_height": "0.2", "initial_layer_print_height": "0.2", "outer_wall_speed": "200",
+                  "outer_wall_acceleration": "5000", "outer_wall_line_width": "0.42",
+                  "top_surface_line_width": "0.42", "top_surface_acceleration": "2000",
+                  "default_acceleration": "10000", "seam_position": "aligned", "enable_overhang_speed": "1",
                   "slow_down_layer_time": "4"},
-    "vitesse": {"layer_height": "0.28", "wall_loops": "2", "top_shell_layers": "3", "bottom_shell_layers": "2",
-                "sparse_infill_density": "10%", "sparse_infill_pattern": "lightning", "slow_down_layer_time": "4"},
+    # Pas de lightning : il laisse les couches du dessus en pont. L'adaptive cubic reste léger au cœur
+    # et se densifie sous les surfaces, avec 4 couches de dessus pour bien fermer.
+    "vitesse": {"layer_height": "0.28", "wall_loops": "2", "top_shell_layers": "4", "bottom_shell_layers": "3",
+                "sparse_infill_density": "12%", "sparse_infill_pattern": "adaptivecubic",
+                "default_acceleration": "14000", "outer_wall_acceleration": "7000",
+                "top_surface_acceleration": "3000", "slow_down_layer_time": "4"},
     "solidite": {"layer_height": "0.2", "wall_loops": "4", "top_shell_layers": "5", "bottom_shell_layers": "4",
                  "sparse_infill_density": "25%", "sparse_infill_pattern": "gyroid", "slow_down_layer_time": "4"},
-    "leger": {"layer_height": "0.24", "wall_loops": "2", "top_shell_layers": "3", "bottom_shell_layers": "3",
-              "sparse_infill_density": "8%", "sparse_infill_pattern": "lightning", "slow_down_layer_time": "4"},
+    "leger": {"layer_height": "0.24", "wall_loops": "2", "top_shell_layers": "4", "bottom_shell_layers": "3",
+              "sparse_infill_density": "10%", "sparse_infill_pattern": "adaptivecubic",
+              "default_acceleration": "12000", "outer_wall_acceleration": "6000",
+              "top_surface_acceleration": "2500", "slow_down_layer_time": "4"},
 }
 
 

@@ -81,6 +81,9 @@ def warnings(ps: dict) -> list[str]:
         out.append(f"Couche de {layer:g} mm trop épaisse pour une buse de {nozzle:g} mm (max conseillé {nozzle * 0.75:g}).")
     if _num(ps.get("wall_loops"), 2) < 2:
         out.append("Une seule paroi : pièce fragile et surfaces irrégulières.")
+    if ps.get("sparse_infill_pattern") == "lightning":
+        out.append("Remplissage lightning : les couches du dessus portent en pont sur de grands vides "
+                   "(dessus affaissé ou troué) ; adaptivecubic garde le gain de poids sans ce défaut.")
     ftype = ps.get("filament_type")
     ftype = (ftype[0] if isinstance(ftype, list) and ftype else ftype) or ""
     if ftype.upper() in ("ABS", "ASA", "PC", "PA") and _num(ps.get("fan_max_speed"), 0) > 60:

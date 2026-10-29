@@ -28,6 +28,18 @@ def test_line_width_percent_and_auto():
     assert rows["inner_wall"]["flow_mm3_s"] == pytest.approx(300 * 0.42 * 0.2, abs=0.1)  # retombe sur line_width
 
 
+def test_goal_accelerations_stay_within_p1s_limits():
+    for name, recipe in slicer.GOALS.items():
+        for key in ("default_acceleration", "outer_wall_acceleration", "top_surface_acceleration"):
+            assert int(recipe.get(key, "0")) <= 15000, (name, key)  # P1S : 20 000 max, marge gardée.
+        assert int(recipe.get("top_surface_acceleration", "0")) <= int(recipe.get("outer_wall_acceleration", "5000"))
+
+
+def test_lightning_infill_is_flagged():
+    assert any("lightning" in w for w in analysis.warnings(dict(PS, sparse_infill_pattern="lightning")))
+    assert all(r["sparse_infill_pattern"] != "lightning" for r in slicer.GOALS.values() if "sparse_infill_pattern" in r)
+
+
 def test_clean_settings_have_only_flow_warning():
     w = analysis.warnings(PS)
     assert len(w) == 1 and "Débit max" in w[0]
