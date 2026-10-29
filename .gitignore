@@ -9,3 +9,6 @@ backups/
 
 # Config locale (code d'accès de l'imprimante) : voir config.example.json
 config.json
+
+# Restes de la CLI Bambu Studio lancée dans ce dossier
+/result.json
