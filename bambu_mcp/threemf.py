@@ -1,4 +1,4 @@
-"""Lecture et modification des projets 3MF de Bambu Studio."""
+"""Reading and editing Bambu Studio 3MF projects."""
 import json
 import re
 import shutil
@@ -13,7 +13,7 @@ PROJECT = "Metadata/project_settings.config"
 MODEL_SETTINGS = "Metadata/model_settings.config"
 SLICE_INFO = "Metadata/slice_info.config"
 
-# Métadonnées d'objet qui ne sont pas des réglages d'impression.
+# Object metadata that are not print settings.
 OBJECT_META = {"name", "extruder", "matrix", "source_file", "source_object_id", "source_volume_id",
                "source_offset_x", "source_offset_y", "source_offset_z"}
 
@@ -88,15 +88,15 @@ def inspect(path: str) -> dict:
         if SLICE_INFO in names:
             info["slice_results"] = parse_slice_info(z.read(SLICE_INFO))
     if not info["has_project_settings"]:
-        info["note"] = ("Fichier sans réglages Bambu : seule la géométrie sera chargée. "
-                        "slice_model ou prepare_print en font un projet P1S complet.")
+        info["note"] = ("File without Bambu settings: only the geometry will be loaded. "
+                        "slice_model or prepare_print turn it into a complete project.")
     return info
 
 
 def get_settings(path: str, key_filter: str | None = None) -> dict:
     with zipfile.ZipFile(path) as z:
         if PROJECT not in z.namelist():
-            raise ValueError("Ce 3MF ne contient pas de réglages Bambu (project_settings.config).")
+            raise ValueError("This 3MF has no Bambu settings (project_settings.config).")
         ps = json.loads(z.read(PROJECT))
     if key_filter:
         words = key_filter.lower().split()
@@ -105,7 +105,7 @@ def get_settings(path: str, key_filter: str | None = None) -> dict:
 
 
 def _key_kind(ps: dict, key: str) -> str | None:
-    """Indique à quel preset (process / filament / machine) appartient une clé du projet."""
+    """Tell which preset (process / filament / machine) a project key belongs to."""
     for kind, id_key in presets.TYPES.items():
         name = ps.get(id_key)
         if isinstance(name, list):
@@ -121,7 +121,7 @@ def _key_kind(ps: dict, key: str) -> str | None:
 
 
 def _mark_modified(ps: dict, keys: list[str]) -> None:
-    """Ajoute les clés modifiées à different_settings_to_system (process, filaments..., machine)."""
+    """Add the changed keys to different_settings_to_system (process, filaments..., machine)."""
     diffs = ps.get("different_settings_to_system")
     if not isinstance(diffs, list) or len(diffs) < 2:
         return
@@ -144,19 +144,19 @@ def _set_object_settings(raw: bytes, object_settings: dict, ps: dict) -> tuple[b
                    or any(m.get("key") == "name" and m.get("value") == target for m in o.findall("metadata"))]
         if not matches:
             names = [m.get("value") for o in objects for m in o.findall("metadata") if m.get("key") == "name"]
-            raise KeyError(f"Objet introuvable : {target!r}. Objets : {names}")
+            raise KeyError(f"Object not found: {target!r}. Objects: {names}")
         for obj in matches:
             for key, value in settings.items():
                 if key not in ps:
-                    raise KeyError(f"Réglage inconnu pour l'objet {target!r} : {key!r}")
-                # Les surcharges d'objet sont toujours des valeurs simples.
+                    raise KeyError(f"Unknown setting for object {target!r}: {key!r}")
+                # Object overrides are always single values.
                 ref = ps[key][0] if isinstance(ps[key], list) and ps[key] else ps[key]
                 new = presets.normalize(ref, value)
                 existing = next((m for m in obj.findall("metadata") if m.get("key") == key), None)
                 before = existing.get("value") if existing is not None else None
                 if existing is None:
                     existing = ET.Element("metadata", {"key": key, "value": new})
-                    # Après les métadonnées existantes, avant les <part>.
+                    # After the existing metadata, before the <part> elements.
                     index = len(obj.findall("metadata"))
                     obj.insert(index, existing)
                 existing.set("value", new)
@@ -166,7 +166,7 @@ def _set_object_settings(raw: bytes, object_settings: dict, ps: dict) -> tuple[b
 
 
 def is_project(path: str) -> bool:
-    """Vrai pour un 3MF qui porte ses propres réglages Bambu (project_settings.config)."""
+    """True for a 3MF that carries its own Bambu settings (project_settings.config)."""
     if Path(path).suffix.lower() != ".3mf":
         return False
     with zipfile.ZipFile(path) as z:
@@ -174,8 +174,8 @@ def is_project(path: str) -> bool:
 
 
 def _set_machine(ps: dict, machine: str) -> dict | None:
-    """Remplace la partie imprimante du projet par le preset `machine`, process et filaments gardés.
-    Rien à faire si le projet vise déjà ce modèle (preset utilisateur dérivé compris)."""
+    """Replace the project's printer part with the `machine` preset, keeping process and filaments.
+    Nothing to do if the project already targets that model (derived user preset included)."""
     cfg = presets.resolve("machine", machine)
     if ps.get("printer_model") == cfg.get("printer_model"):
         return None
@@ -184,20 +184,20 @@ def _set_machine(ps: dict, machine: str) -> dict | None:
     ps["printer_settings_id"] = machine
     diffs = ps.get("different_settings_to_system")
     if isinstance(diffs, list) and diffs:
-        diffs[-1] = ""  # Dernier emplacement : écarts au preset machine, qui n'existent plus.
+        diffs[-1] = ""  # Last slot: differences from the machine preset, which no longer exist.
     return {"key": "printer_settings_id", "before": before, "after": machine}
 
 
 def edit(path: str, settings: dict | None = None, object_settings: dict | None = None,
          output_path: str | None = None, machine: str | None = None) -> dict:
-    """Écrit une copie modifiée du 3MF. L'original n'est remplacé que si output_path == path.
-    `machine` : convertit le projet vers ce preset imprimante avant d'appliquer `settings`."""
+    """Write an edited copy of the 3MF. The original is replaced only if output_path == path.
+    `machine`: converts the project to that printer preset before applying `settings`."""
     src = Path(path)
     out = Path(output_path) if output_path else src.with_name(f"{src.stem}_claude{src.suffix}")
     with zipfile.ZipFile(src) as z:
         names = z.namelist()
         if PROJECT not in names:
-            raise ValueError("Pas de réglages Bambu dans ce 3MF : en faire d'abord un projet avec slice_model.")
+            raise ValueError("No Bambu settings in this 3MF: turn it into a project with slice_model first.")
         ps = json.loads(z.read(PROJECT))
         changes: list = []
         converted = _set_machine(ps, machine) if machine else None
@@ -212,7 +212,7 @@ def edit(path: str, settings: dict | None = None, object_settings: dict | None =
         object_changes: list = []
         if object_settings:
             if MODEL_SETTINGS not in names:
-                raise ValueError("Pas de model_settings.config : réglages par objet impossibles.")
+                raise ValueError("No model_settings.config: per-object settings are not possible.")
             replaced[MODEL_SETTINGS], object_changes = _set_object_settings(
                 z.read(MODEL_SETTINGS), object_settings, ps)
         tmp = out.with_suffix(out.suffix + ".tmp")
@@ -225,5 +225,5 @@ def edit(path: str, settings: dict | None = None, object_settings: dict | None =
     tmp.replace(out)
     result = {"output": str(out), "changes": changes, "object_changes": object_changes}
     if any(n.endswith(".gcode") for n in names):
-        result["warning"] = "Le G-code déjà présent dans ce fichier est obsolète : re-slicer avant d'imprimer."
+        result["warning"] = "The G-code already in this file is out of date: slice again before printing."
     return result

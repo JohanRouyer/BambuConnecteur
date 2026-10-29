@@ -1,4 +1,4 @@
-"""Valeurs par défaut de l'utilisateur (imprimante, plateau, filament), choisies à la première utilisation."""
+"""User defaults (printer, build plate, filament), chosen on first use."""
 from . import config, materials, presets
 
 
@@ -9,23 +9,23 @@ def current() -> dict:
 
 
 def options() -> dict:
-    """Choix possibles : imprimantes (presets machine système et utilisateur) et plateaux."""
+    """Available choices: printers (system and user machine presets) and build plates."""
     machines = [r["name"] for r in presets.list_presets("machine", "all")
                 if r["source"] == "user" or r["name"].startswith("Bambu Lab")]
     return {"machines": machines, "bed_types": list(materials.BED_TYPES)}
 
 
 def _filament(name: str, machine: str) -> str:
-    """Preset filament pour `machine`, à partir d'un nom de preset ou de matériau (« PLA Matte »)."""
+    """Filament preset for `machine`, from a preset or material name ("PLA Matte")."""
     try:
         return presets.for_machine("filament", name, machine)
     except KeyError:
-        _, info = materials.find(name)  # KeyError avec la liste des matériaux si inconnu
+        _, info = materials.find(name)  # KeyError listing the materials if unknown
         return presets.for_machine("filament", info["filament"], machine)
 
 
 def configure(machine: str | None = None, bed_type: str | None = None, filament: str | None = None) -> dict:
-    """Valide puis enregistre les valeurs données dans config.json ; les autres restent inchangées."""
+    """Validate then save the given values in config.json; the others stay unchanged."""
     updates: dict = {}
     if machine:
         name = presets.canonical("machine", machine)
@@ -34,13 +34,13 @@ def configure(machine: str | None = None, bed_type: str | None = None, filament:
     if bed_type:
         beds = {b.lower(): b for b in materials.BED_TYPES}
         if bed_type.lower() not in beds:
-            raise ValueError(f"Plateau inconnu {bed_type!r} : {list(materials.BED_TYPES)}")
+            raise ValueError(f"Unknown build plate {bed_type!r}: {list(materials.BED_TYPES)}")
         updates["default_bed_type"] = beds[bed_type.lower()]
-    # Un filament déjà enregistré suit le changement d'imprimante.
+    # A saved filament follows a printer change.
     if filament or (machine and config.default_filament()):
         updates["default_filament"] = _filament(filament or config.default_filament(), target)
     if not updates and config.setup_needed():
-        updates["default_machine"] = target  # Confirme l'imprimante par défaut telle quelle.
+        updates["default_machine"] = target  # Confirms the default printer as is.
     if updates:
         config.save(updates)
     return {**current(), "saved": updates}

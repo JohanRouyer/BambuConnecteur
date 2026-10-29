@@ -1,4 +1,4 @@
-"""Outils communs : maillages de test générés à la volée, config et dossier de sortie isolés."""
+"""Shared helpers: test meshes generated on the fly, isolated config and output folder."""
 import json
 import struct
 import sys
@@ -13,11 +13,11 @@ sys.path.insert(0, str(Path(__file__).resolve().parent.parent))
 from bambu_mcp import config  # noqa: E402
 
 HAS_BAMBU = config.executable().exists()
-needs_bambu = pytest.mark.skipif(not HAS_BAMBU, reason="Bambu Studio non installé")
+needs_bambu = pytest.mark.skipif(not HAS_BAMBU, reason="Bambu Studio not installed")
 
 
 def solid(vertices, quads) -> np.ndarray:
-    """Triangles (n, 3, 3) d'un solide convexe, orientés vers l'extérieur."""
+    """Triangles (n, 3, 3) of a convex solid, facing outward."""
     v = np.array(vertices, dtype=float)
     center = v.mean(axis=0)
     tris = []
@@ -39,7 +39,7 @@ def box(sx, sy, sz) -> np.ndarray:
 
 
 def funnel() -> np.ndarray:
-    """Pyramide tronquée posée sur sa petite face : flancs à 63° de la verticale, donc en surplomb."""
+    """Truncated pyramid standing on its small face: sides 63° from vertical, so overhanging."""
     return solid([(20, 20, 0), (30, 20, 0), (30, 30, 0), (20, 30, 0),
                   (0, 0, 10), (50, 0, 10), (50, 50, 10), (0, 50, 10)], QUADS)
 
@@ -52,8 +52,8 @@ def write_stl(tris: np.ndarray, path: Path, ascii: bool = False) -> Path:
                       "endloop", "endfacet"]
         path.write_text("\n".join(lines + ["endsolid t"]))
         return path
-    # Vraies normales : Bambu Studio prend pour un STL texte un binaire dont tous les octets sont < 128
-    # (cas d'un cube de 10 mm avec des normales nulles), et échoue à le lire.
+    # Real normals: Bambu Studio mistakes a binary STL whose bytes are all < 128 for a text STL
+    # (a 10 mm cube with null normals, for instance) and fails to read it.
     normals = np.cross(tris[:, 1] - tris[:, 0], tris[:, 2] - tris[:, 0])
     normals /= np.linalg.norm(normals, axis=1, keepdims=True)
     body = b"".join(n.astype("<f4").tobytes() + t.astype("<f4").tobytes() + b"\0\0" for n, t in zip(normals, tris))
@@ -63,7 +63,7 @@ def write_stl(tris: np.ndarray, path: Path, ascii: bool = False) -> Path:
 
 def write_3mf(tris: np.ndarray, path: Path, transform: str = "1 0 0 0 1 0 0 0 1 0 0 0",
               split: bool = False) -> Path:
-    """3MF minimal ; `split` met le maillage dans un fichier séparé, comme Bambu Studio."""
+    """Minimal 3MF; `split` puts the mesh in a separate file, like Bambu Studio does."""
     verts, index = [], {}
     faces = []
     for t in tris:
@@ -94,7 +94,7 @@ def write_3mf(tris: np.ndarray, path: Path, transform: str = "1 0 0 0 1 0 0 0 1 
 
 @pytest.fixture(autouse=True)
 def isolated_config(tmp_path, monkeypatch):
-    """config.json de test : chemins de l'utilisateur gardés, valeurs par défaut retirées (P1S)."""
+    """Test config.json: the user's paths are kept, defaults removed (P1S)."""
     real = {k: v for k, v in config.load().items() if not k.startswith("default_")}
     path = tmp_path / "config.json"
     path.write_text(json.dumps(real), encoding="utf-8")
@@ -104,7 +104,7 @@ def isolated_config(tmp_path, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def isolated_output(tmp_path, monkeypatch):
-    """Chaque test écrit dans son propre dossier de sortie (cache et historique compris)."""
+    """Each test writes to its own output folder (cache and history included)."""
     out = tmp_path / "output"
     out.mkdir()
     monkeypatch.setattr(config, "output_dir", lambda: out)

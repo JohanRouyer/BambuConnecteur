@@ -1,4 +1,4 @@
-"""Géométrie des modèles (STL, 3MF) : taille, volume, surplombs, meilleure orientation sur l'imprimante."""
+"""Model geometry (STL, 3MF): size, volume, overhangs, best orientation on the printer."""
 import re
 import struct
 import zipfile
@@ -8,22 +8,22 @@ import numpy as np
 
 from . import config, presets
 
-# Volume imprimable de repli (P1S) quand le preset de l'imprimante est illisible.
+# Fallback build volume (P1S) when the printer preset cannot be read.
 BED = (256.0, 256.0, 250.0)
-# Une face tournée vers le bas à plus de 60° de la verticale demande en général un support ;
-# entre 45 et 60° une Bambu s'en sort avec un bon refroidissement. Les faces horizontales sont des ponts.
+# A downward face more than 60° from vertical usually needs support; between 45 and 60° a Bambu
+# copes with good cooling. Horizontal faces are bridges.
 OVERHANG_ANGLE = 60
 BRIDGE_NZ = -0.985
 
-# Orientations testées, nommées d'après la rotation appliquée (degrés autour de X puis Y).
+# Tested orientations, named after the applied rotation (degrees around X then Y).
 ORIENTATIONS = {
-    "tel quel": (0, 0), "retourné": (180, 0), "basculé vers l'avant": (90, 0),
-    "basculé vers l'arrière": (-90, 0), "couché à gauche": (0, 90), "couché à droite": (0, -90),
+    "as is": (0, 0), "upside down": (180, 0), "tipped forward": (90, 0),
+    "tipped backward": (-90, 0), "on its left side": (0, 90), "on its right side": (0, -90),
 }
 
 
 def bed() -> tuple[float, float, float]:
-    """Volume imprimable (X, Y, Z en mm) de l'imprimante par défaut, lu dans son preset."""
+    """Build volume (X, Y, Z in mm) of the default printer, read from its preset."""
     try:
         cfg = presets.resolve("machine", config.default_machine())
         xs, ys = zip(*(map(float, corner.split("x")) for corner in cfg["printable_area"]))
@@ -49,7 +49,7 @@ def _read_stl(path: Path) -> np.ndarray:
             return rec["v"].astype(np.float64)
     nums = re.findall(rb"vertex\s+(\S+)\s+(\S+)\s+(\S+)", data)
     if not nums:
-        raise ValueError(f"STL illisible : {path}")
+        raise ValueError(f"Unreadable STL: {path}")
     return np.array(nums, dtype=np.float64).reshape(-1, 3, 3)
 
 
@@ -59,7 +59,7 @@ _MATRIX = re.compile(r'transform="([^"]+)"')
 
 
 def _transform(attr: str | None) -> np.ndarray:
-    """Matrice 3MF (12 nombres, vecteurs ligne) en matrice homogène 4x4."""
+    """3MF matrix (12 numbers, row vectors) to a 4x4 homogeneous matrix."""
     m = np.eye(4)
     if attr:
         vals = np.array(attr.split(), dtype=np.float64)
@@ -69,7 +69,7 @@ def _transform(attr: str | None) -> np.ndarray:
 
 
 def _mesh_objects(xml: bytes) -> dict:
-    """Maillages d'un fichier .model : {id d'objet: triangles (n, 3, 3)}."""
+    """Meshes of a .model file: {object id: triangles (n, 3, 3)}."""
     out = {}
     for match in re.finditer(rb'<object id="(\d+)"[^>]*>(.*?)</object>', xml, re.S):
         body = match.group(2)
@@ -83,7 +83,7 @@ def _mesh_objects(xml: bytes) -> dict:
 
 
 def _read_3mf(path: Path) -> np.ndarray:
-    """Tous les objets du plateau, transformations du build appliquées."""
+    """Every object on the plate, with build transforms applied."""
     with zipfile.ZipFile(path) as z:
         main = z.read("3D/3dmodel.model")
         files = {"/3D/3dmodel.model": main}
@@ -111,20 +111,20 @@ def _read_3mf(path: Path) -> np.ndarray:
             m = build @ local
             parts.append(tris @ m[:3, :3].T + m[:3, 3])
     if not parts:
-        raise ValueError(f"Aucun maillage trouvé dans {path}")
+        raise ValueError(f"No mesh found in {path}")
     return np.concatenate(parts)
 
 
 def load(path: str) -> np.ndarray:
     p = Path(path)
     if not p.exists():
-        raise FileNotFoundError(f"Modèle introuvable : {p}")
+        raise FileNotFoundError(f"Model not found: {p}")
     suffix = p.suffix.lower()
     if suffix == ".stl":
         return _read_stl(p)
     if suffix == ".3mf":
         return _read_3mf(p)
-    raise ValueError(f"Format non géré : {suffix} (STL ou 3MF).")
+    raise ValueError(f"Unsupported format: {suffix} (STL or 3MF).")
 
 
 def _metrics(tris: np.ndarray) -> dict:
@@ -145,7 +145,7 @@ def _metrics(tris: np.ndarray) -> dict:
 
 
 def analyze(path: str) -> dict:
-    """Dimensions, volume, tenue sur le plateau et surplombs pour chaque orientation simple."""
+    """Dimensions, volume, fit on the bed and overhangs for each simple orientation."""
     tris = load(path)
     tris = tris - tris.reshape(-1, 3).mean(axis=0)
     volume = abs(float(np.einsum("ij,ij->i", tris[:, 0], np.cross(tris[:, 1], tris[:, 2])).sum()) / 6)
@@ -162,36 +162,36 @@ def analyze(path: str) -> dict:
         r["overhang_pct"] = round(100 * r["overhang_area_mm2"] / surface, 1) if surface else 0
         r["bridge_pct"] = round(100 * r["bridge_area_mm2"] / surface, 1) if surface else 0
         r["needs_support"] = r["overhang_pct"] > 2
-    # Moins de surplombs (les ponts comptent à moitié), puis meilleure assise, puis moins haut.
+    # Fewest overhangs (bridges count half), then best footprint, then lowest height.
     best = min((r for r in rows if r["fits_bed"]), default=rows[0],
                key=lambda r: (round(r["overhang_pct"] + r["bridge_pct"] / 2), -r["base_area_mm2"], r["size_mm"][2]))
     current = rows[0]
     advice = []
     if not current["fits_bed"]:
-        advice.append(f"Trop grand pour l'imprimante tel quel ({' x '.join(f'{b:g}' for b in volume_mm)} mm) : "
-                      "réorienter, réduire ou découper.")
+        advice.append(f"Too big for the printer as is ({' x '.join(f'{b:g}' for b in volume_mm)} mm): "
+                      "reorient, scale down or split.")
     if current["needs_support"]:
-        advice.append(f"{current['overhang_pct']} % de la surface en surplomb à plus de {OVERHANG_ANGLE}° : "
-                      "supports probablement nécessaires (vérifier les avertissements du slicer).")
+        advice.append(f"{current['overhang_pct']} % of the surface overhangs more than {OVERHANG_ANGLE}°: "
+                      "supports probably needed (check the slicer warnings).")
     if current["bridge_pct"] > 5:
-        advice.append(f"{current['bridge_pct']} % de ponts (faces horizontales dans le vide) : "
-                      "OK sur courte portée, sinon supports.")
+        advice.append(f"{current['bridge_pct']} % bridges (horizontal faces over air): "
+                      "fine over short spans, otherwise supports.")
     if current["base_area_mm2"] < 50:
-        advice.append("Petite surface de contact avec le plateau : ajouter une bordure (brim).")
+        advice.append("Small contact area with the bed: add a brim.")
     w, d, h = current["size_mm"]
     if min(w, d) and h / min(w, d) > 4:
-        advice.append("Pièce haute et fine : bordure conseillée, vitesse réduite en haut.")
+        advice.append("Tall and thin part: brim recommended, slower speed near the top.")
     if best is not current:
-        advice.append(f"Meilleure orientation estimée : « {best['orientation']} ».")
+        advice.append(f"Estimated best orientation: {best['orientation']!r}.")
     return {"file": path, "machine": config.default_machine(), "bed_mm": list(volume_mm),
             "triangles": int(len(tris)), "volume_cm3": round(volume / 1000, 2),
             "solid_weight_pla_g": round(volume / 1000 * 1.24, 1), "current": current,
             "best_orientation": best["orientation"], "orientations": rows, "advice": advice,
-            "note": "Estimation géométrique : les ponts et petits surplombs passent souvent sans support."}
+            "note": "Geometric estimate: bridges and small overhangs often print fine without support."}
 
 
 def write_rotated_stl(path: str, rx: float, ry: float, dest: Path) -> Path:
-    """Copie STL binaire tournée, posée sur Z = 0."""
+    """Rotated binary STL copy, resting on Z = 0."""
     tris = load(path) @ _rotation(rx, ry).T
     tris[:, :, 2] -= tris[:, :, 2].min()
     cross = np.cross(tris[:, 1] - tris[:, 0], tris[:, 2] - tris[:, 0])

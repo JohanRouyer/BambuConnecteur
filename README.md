@@ -1,306 +1,299 @@
 # BambuConnecteur
 
-**Connecteur MCP qui donne à Claude l'accès à Bambu Studio et à ton imprimante Bambu Lab.**
+**An MCP connector that gives Claude access to Bambu Studio and your Bambu Lab printer.**
 
-Donne un fichier STL ou 3MF à Claude : il analyse la pièce, te demande ton filament, slice plusieurs
-variantes avec le vrai moteur de Bambu Studio, compare temps et poids, puis te rend un projet `.3mf`
-prêt à ouvrir et imprimer. Tout tourne en local sur ton PC.
+Hand Claude an STL or 3MF file: it analyzes the part, asks which filament you use, slices several
+variants with the real Bambu Studio engine, compares time and weight, then gives you a `.3mf`
+project ready to open and print. Everything runs locally on your PC.
 
-Fonctionne avec les imprimantes **Bambu Lab** (P1S, P1P, X1 Carbon, A1, A1 mini…) : à la première
-utilisation, Claude te demande ton imprimante, ton plateau et ton filament habituels. Recettes
-calibrées sur une P1S avec buse 0,4 mm.
+Works with **Bambu Lab** printers (P1S, P1P, X1 Carbon, A1, A1 mini…): on first use, Claude asks for
+your printer, build plate and usual filament. Recipes are tuned on a 0.4 mm nozzle.
 
 ---
 
-## Sommaire
+## Contents
 
-- [Ce que ça fait](#ce-que-ça-fait)
-- [Exemple](#exemple)
-- [Prérequis](#prérequis)
+- [What it does](#what-it-does)
+- [Example](#example)
+- [Requirements](#requirements)
 - [Installation](#installation)
 - [Configuration](#configuration)
-- [Outils disponibles](#outils-disponibles)
-- [Comment ça marche](#comment-ça-marche)
-- [Sécurité](#sécurité)
-- [Limites connues](#limites-connues)
-- [Dépannage](#dépannage)
-- [Développement](#développement)
+- [Available tools](#available-tools)
+- [How it works](#how-it-works)
+- [Safety](#safety)
+- [Known limitations](#known-limitations)
+- [Troubleshooting](#troubleshooting)
+- [Development](#development)
 
 ---
 
-## Ce que ça fait
+## What it does
 
-- **Configuration à la première utilisation** : imprimante, plateau et filament habituels, demandés
-  une fois puis enregistrés. Le volume d'impression, les presets et les accélérations suivent
-  l'imprimante choisie.
-- **Analyse de pièce** : dimensions, volume, tenue sur le plateau, surplombs et ponts selon
-  6 orientations, meilleure orientation, besoin de supports ou de bordure.
-- **Slicing réel** avec `bambu-studio.exe` : temps, poids, temps par type de ligne, avertissements.
-- **Comparaison de recettes** en parallèle (`qualite`, `equilibre`, `vitesse`, `solidite`, `leger`),
-  avec la variante conseillée et le détail par plateau.
-- **Projets multi-plateaux** : un seul `result.3mf` contient tous les plateaux et leur G-code.
-- **Conversion automatique** : un projet fait pour une autre imprimante est converti pour la tienne, avec les réglages d'impression de l'auteur gardés.
-- **Changement de filament** : applique ton filament (températures, plateau, débit, refroidissement)
-  à n'importe quel projet.
-- **Contrôles** : débit volumétrique et vitesse réelle par type de ligne, couche trop épaisse,
-  refroidissement, remplissage lightning, pièges par matériau.
-- **Presets** : lire, comparer, créer ou modifier tes presets Bambu Studio (avec sauvegarde).
-- **Imprimante** (facultatif) : état en réseau local, températures, AMS, erreurs HMS, en lecture seule.
+- **First-use setup**: your printer, build plate and usual filament, asked once and saved. Build
+  volume, presets and accelerations follow the printer you chose.
+- **Part analysis**: dimensions, volume, fit on the bed, overhangs and bridges for 6 orientations,
+  best orientation, need for supports or a brim.
+- **Real slicing** with `bambu-studio.exe`: time, weight, time per line type, warnings.
+- **Recipe comparison** in parallel (`quality`, `balanced`, `speed`, `strength`, `light`), with the
+  recommended variant and per-plate details.
+- **Multi-plate projects**: a single `result.3mf` holds every plate and its G-code.
+- **Automatic conversion**: a project made for another printer is converted to yours, keeping the
+  author's print settings.
+- **Filament swap**: applies your filament (temperatures, build plate, flow, cooling) to any project.
+- **Checks**: volumetric flow and actual speed per line type, layers too thick, cooling, lightning
+  infill, pitfalls per material.
+- **Presets**: read, compare, create or modify your Bambu Studio presets (with backups).
+- **Printer** (optional): status over the local network, temperatures, AMS, HMS errors, read-only.
 
-Le connecteur **ne lance jamais d'impression** : tu ouvres le 3MF produit dans Bambu Studio et tu
-imprimes toi-même.
+The connector **never starts a print**: you open the produced 3MF in Bambu Studio and print it yourself.
 
-## Exemple
+## Example
 
-> **Toi :** voilà ma coque de caméra, fais-la en PLA Matte noir Bambu
-> `C:\Users\moi\Downloads\coque.3mf`
+> **You:** here's my camera case, print it in Bambu PLA Matte black
+> `C:\Users\me\Downloads\case.3mf`
 >
-> **Claude :** analyse les 4 plateaux, convertit le projet (fait pour une X1C) pour ta P1S, applique
-> le preset `Bambu PLA Matte`, slice les 6 variantes en parallèle, puis répond :
+> **Claude:** analyzes the 4 plates, converts the project (made for an X1C) to your printer, applies
+> the `Bambu PLA Matte` preset, slices the 6 variants in parallel, then answers:
 >
-> | Variante | Temps | Poids |
+> | Variant | Time | Weight |
 > |---|---|---|
-> | Original | 9 h 11 | 459,3 g |
-> | **Équilibre** | **9 h 32** | **454,1 g** |
-> | Vitesse | 7 h 29 | 379,4 g |
+> | Original | 9 h 11 | 459.3 g |
+> | **Balanced** | **9 h 32** | **454.1 g** |
+> | Speed | 7 h 29 | 379.4 g |
 > | … | | |
 >
-> Recommandation, points d'attention, détail par plateau et chemin du `result.3mf` à ouvrir.
+> Recommendation, things to watch, per-plate details and the path of the `result.3mf` to open.
 
-Ce résumé vient du skill [`impression-3d`](skills/impression-3d/SKILL.md), fourni avec le connecteur
-(voir l'[étape 4](#4-installer-le-skill-impression-3d-conseillé)).
+This summary comes from the [`3d-printing`](skills/3d-printing/SKILL.md) skill shipped with the
+connector (see [step 4](#4-install-the-3d-printing-skill-recommended)).
 
-## Prérequis
+## Requirements
 
 | | |
 |---|---|
-| Système | **Windows 10 ou 11** |
-| Bambu Studio | Installé (chemin par défaut : `C:\Program Files\Bambu Studio`), lancé au moins une fois |
-| Python | **3.10 ou plus récent** ([python.org](https://www.python.org/downloads/)) |
-| Claude | [Claude Code](https://claude.com/claude-code) (terminal, application de bureau ou IDE) ou Claude Desktop |
-| Git | Pour cloner le dépôt (ou télécharger le ZIP depuis GitHub) |
+| System | **Windows 10 or 11** |
+| Bambu Studio | Installed (default path: `C:\Program Files\Bambu Studio`) and launched at least once |
+| Python | **3.10 or newer** ([python.org](https://www.python.org/downloads/)) |
+| Claude | [Claude Code](https://claude.com/claude-code) (terminal, desktop app or IDE) or Claude Desktop |
+| Git | To clone the repository (or download the ZIP from GitHub) |
 
 ## Installation
 
-Les commandes suivantes sont à lancer dans **PowerShell**.
+Run the following commands in **PowerShell**.
 
-### 1. Récupérer le projet
+### 1. Get the project
 
 ```powershell
 git clone https://github.com/JohanRouyer/BambuConnecteur.git
 cd BambuConnecteur
 ```
 
-Place le dossier où tu veux, mais **ne le déplace plus ensuite** : Claude le lance par son chemin
-complet.
+Put the folder wherever you like, but **do not move it afterwards**: Claude starts it by its full path.
 
-### 2. Créer l'environnement Python
+### 2. Create the Python environment
 
 ```powershell
 python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-### 3. Déclarer le connecteur auprès de Claude
+### 3. Register the connector with Claude
 
-**Claude Code** : depuis le dossier du projet, déclare-le pour tous tes projets (`--scope user`) :
+**Claude Code**: from the project folder, register it for all your projects (`--scope user`):
 
 ```powershell
 claude mcp add --scope user bambu-studio -- "$PWD\.venv\Scripts\python.exe" "$PWD\run_server.py"
 ```
 
-**Claude Desktop** : ouvre *Paramètres → Développeur → Modifier la configuration* et ajoute, en
-remplaçant le chemin par celui de ton dossier (barres obliques inverses doublées) :
+**Claude Desktop**: open *Settings → Developer → Edit Config* and add the following, replacing the
+path with your folder's (with doubled backslashes):
 
 ```json
 {
   "mcpServers": {
     "bambu-studio": {
-      "command": "C:\\chemin\\vers\\BambuConnecteur\\.venv\\Scripts\\python.exe",
-      "args": ["C:\\chemin\\vers\\BambuConnecteur\\run_server.py"]
+      "command": "C:\\path\\to\\BambuConnecteur\\.venv\\Scripts\\python.exe",
+      "args": ["C:\\path\\to\\BambuConnecteur\\run_server.py"]
     }
   }
 }
 ```
 
-Redémarre ensuite Claude pour qu'il charge le connecteur.
+Then restart Claude so it loads the connector.
 
-### 4. Installer le skill `impression-3d` (conseillé)
+### 4. Install the `3d-printing` skill (recommended)
 
-Le skill dit à Claude comment enchaîner les outils dès que tu parles d'impression 3D ou donnes un
-fichier STL / 3MF : analyse, question sur le filament, slicing, résumé complet. Sans lui, les outils
-restent utilisables, mais il faut les demander un par un.
+The skill tells Claude how to chain the tools as soon as you talk about 3D printing or give an STL /
+3MF file: analysis, filament question, slicing, full summary. Without it the tools still work, but you
+have to ask for them one by one.
 
 ```powershell
 New-Item -ItemType Directory -Force "$env:USERPROFILE\.claude\skills" | Out-Null
-Copy-Item -Recurse -Force skills\impression-3d "$env:USERPROFILE\.claude\skills\"
+Copy-Item -Recurse -Force skills\3d-printing "$env:USERPROFILE\.claude\skills\"
 ```
 
-Le skill est utilisé par Claude Code. Pour le mettre à jour après un `git pull`, relance la commande
-`Copy-Item`.
+The skill is used by Claude Code. To update it after a `git pull`, run the `Copy-Item` command again.
 
-### 5. Première utilisation
+### 5. First use
 
-Donne un fichier à Claude, ou demande-lui *« configure mon imprimante »*. Comme rien n'est encore
-réglé, il te demande d'abord :
+Give Claude a file, or ask *"set up my printer"*. Since nothing is set yet, it first asks for:
 
-- ton **imprimante** (P1S, X1 Carbon, A1, A1 mini… et la buse si elle n'est pas de 0,4 mm) ;
-- ton **plateau** habituel (Textured PEI, Cool Plate, High Temp, Engineering) ;
-- ton **filament** habituel (Bambu PLA Basic, PLA Matte, PETG HF…).
+- your **printer** (P1S, X1 Carbon, A1, A1 mini… and the nozzle if it is not 0.4 mm);
+- your usual **build plate** (Textured PEI, Cool Plate, High Temp, Engineering);
+- your usual **filament** (Bambu PLA Basic, PLA Matte, PETG HF…).
 
-Il enregistre ces choix dans `config.json`, puis continue ta demande. Pour en changer plus tard,
-dis-le simplement : *« je suis passé sur une A1 »*, *« mon plateau habituel est le Cool Plate »*.
+It saves these choices in `config.json`, then carries on with your request. To change them later,
+just say so: *"I switched to an A1"*, *"my usual plate is the Cool Plate"*.
 
-Pour vérifier l'installation, demande *« donne-moi les infos du connecteur bambu-studio »* : la
-réponse doit contenir `"exists": true` pour Bambu Studio et le chemin de tes presets.
+To check the installation, ask *"show me the bambu-studio connector info"*: the answer should contain
+`"exists": true` for Bambu Studio and the path of your presets.
 
 ## Configuration
 
-Les valeurs par défaut se règlent en parlant à Claude (voir [Première utilisation](#5-première-utilisation)) :
-il les écrit dans `config.json`, qui n'est pas suivi par git. Tu peux aussi éditer ce fichier à la
-main, en partant de l'exemple :
+Defaults are set by talking to Claude (see [First use](#5-first-use)): it writes them to
+`config.json`, which is not tracked by git. You can also edit that file by hand, starting from the
+example:
 
 ```powershell
 Copy-Item config.example.json config.json
 ```
 
-| Clé | Rôle | Par défaut |
+| Key | Purpose | Default |
 |---|---|---|
-| `default_machine` | Imprimante visée par tous les slices (nom exact du preset machine) | `Bambu Lab P1S 0.4 nozzle` |
-| `default_process` | Process de départ pour un STL sans presets (réglé avec l'imprimante) | `0.20mm Standard @BBL X1C` |
-| `default_bed_type` | Plateau utilisé au slicing | celui du projet |
-| `default_filament` | Filament proposé en premier, et utilisé pour un STL sans filament précisé | PLA Basic |
-| `output_dir` | Dossier des résultats | `output\` dans le projet |
-| `bambu_studio_dir` | Dossier d'installation de Bambu Studio | `C:\Program Files\Bambu Studio` |
-| `bambu_data_dir` | Dossier de données de Bambu Studio | `%APPDATA%\BambuStudio` |
-| `user_id` | Compte Bambu dont lire les presets utilisateur | le premier compte trouvé |
-| `printer` | Connexion à l'imprimante en réseau local (voir ci-dessous) | vide |
+| `default_machine` | Printer targeted by every slice (exact machine preset name) | `Bambu Lab P1S 0.4 nozzle` |
+| `default_process` | Starting process for an STL without presets (set along with the printer) | `0.20mm Standard @BBL X1C` |
+| `default_bed_type` | Build plate used when slicing | the project's |
+| `default_filament` | Filament offered first, and used for an STL without a specified filament | PLA Basic |
+| `output_dir` | Results folder | `output\` in the project |
+| `bambu_studio_dir` | Bambu Studio install folder | `C:\Program Files\Bambu Studio` |
+| `bambu_data_dir` | Bambu Studio data folder | `%APPDATA%\BambuStudio` |
+| `user_id` | Bambu account whose user presets are read | the first account found |
+| `printer` | Printer connection over the local network (see below) | empty |
 
-> Les presets P1S de Bambu réutilisent les process de la X1C : c'est pourquoi le process par défaut
-> s'appelle `@BBL X1C`. Il est choisi automatiquement quand tu changes d'imprimante.
+> Bambu's P1S presets reuse the X1C processes: that is why the default process is named `@BBL X1C`.
+> It is picked automatically when you change printer.
 
-### Connexion à l'imprimante (facultatif)
+### Printer connection (optional)
 
-Seul l'outil `printer_status` en a besoin. Dans `config.json`, remplis la section `printer` :
+Only the `printer_status` tool needs it. In `config.json`, fill in the `printer` section:
 
-| Clé | Où la trouver sur l'écran de l'imprimante |
+| Key | Where to find it on the printer's screen |
 |---|---|
-| `host` | Adresse IP : *Paramètres → Réseau* |
-| `serial` | Numéro de série : *Paramètres → Appareil* |
-| `access_code` | Code d'accès LAN : *Paramètres → Réseau* |
+| `host` | IP address: *Settings → Network* |
+| `serial` | Serial number: *Settings → Device* |
+| `access_code` | LAN access code: *Settings → Network* |
 
-Le PC et l'imprimante doivent être sur le même réseau.
+The PC and the printer must be on the same network.
 
-## Outils disponibles
+## Available tools
 
-| Outil | Rôle |
+| Tool | Purpose |
 |---|---|
-| `analyze_model` | Géométrie d'un STL / 3MF : dimensions, volume, surplombs et ponts selon 6 orientations, meilleure orientation |
-| `inspect_3mf` | Résumé d'un 3MF : presets, objets et leurs réglages propres, plateaux, résultats de slicing |
-| `material_guide` | Conseils par matériau : preset, plateaux et températures, capot / porte, AMS, buse, séchage |
-| `prepare_print` | STL / 3MF → projet prêt en un appel : orientation, preset du matériau, plateau, supports, bordure, copies, slice |
-| `optimize` | Les 5 recettes et l'original slicés en parallèle, avec la variante conseillée |
-| `compare_slices` | Tes propres variantes `{nom: {réglage: valeur}}` slicées en parallèle |
-| `slice_model` | Un slice, avec presets et réglages au choix |
-| `check_settings` | Contrôle un 3MF sans slicer : débit, vitesses réelles, refroidissement, pièges |
-| `get_3mf_settings` | Tous les réglages d'un projet 3MF, filtrables par mot-clé |
-| `edit_3mf` | Copie modifiée d'un 3MF (`<nom>_claude.3mf`), réglages globaux ou par objet |
-| `list_presets` | Presets process / filament / machine, compatibles avec ton imprimante par défaut |
-| `get_preset` | Réglages d'un preset, héritage résolu |
-| `compare_presets` | Différences entre deux presets |
-| `save_preset` | Crée ou modifie un preset utilisateur (l'ancien est sauvegardé dans `backups\`) |
-| `slice_history` | Derniers slices : modèles, presets, réglages, temps, poids, fichier produit |
-| `printer_status` | État de l'imprimante : impression, températures, AMS, erreurs HMS (lecture seule) |
-| `setup_defaults` | Imprimante, plateau et filament par défaut : lecture, choix possibles, enregistrement |
-| `connector_info` | Chemins utilisés, état de la configuration, première utilisation à faire ou non |
+| `analyze_model` | Geometry of an STL / 3MF: dimensions, volume, overhangs and bridges for 6 orientations, best orientation |
+| `inspect_3mf` | Summary of a 3MF: presets, objects and their own settings, plates, slicing results |
+| `material_guide` | Advice per material: preset, build plates and temperatures, lid / door, AMS, nozzle, drying |
+| `prepare_print` | STL / 3MF → ready project in one call: orientation, material preset, build plate, supports, brim, copies, slice |
+| `optimize` | The 5 recipes and the original sliced in parallel, with the recommended variant |
+| `compare_slices` | Your own variants `{name: {setting: value}}` sliced in parallel |
+| `slice_model` | A single slice, with presets and settings of your choice |
+| `check_settings` | Checks a 3MF without slicing: flow, actual speeds, cooling, pitfalls |
+| `get_3mf_settings` | Every setting of a 3MF project, filterable by keyword |
+| `edit_3mf` | Edited copy of a 3MF (`<name>_claude.3mf`), global or per-object settings |
+| `list_presets` | Process / filament / machine presets compatible with your default printer |
+| `get_preset` | Settings of a preset, inheritance resolved |
+| `compare_presets` | Differences between two presets |
+| `save_preset` | Creates or modifies a user preset (the old one is backed up in `backups\`) |
+| `slice_history` | Latest slices: models, presets, settings, time, weight, produced file |
+| `printer_status` | Printer status: print job, temperatures, AMS, HMS errors (read-only) |
+| `setup_defaults` | Default printer, build plate and filament: read, available choices, save |
+| `connector_info` | Paths used, configuration status, whether first-use setup is needed |
 
-## Comment ça marche
+## How it works
 
-### Les recettes
+### Recipes
 
-Elles s'appliquent **par-dessus** les réglages du projet. Sur un projet Bambu, tout le reste
-(supports, bordures, réglages par objet de l'auteur) est conservé.
+They apply **on top of** the project's settings. On a Bambu project, everything else (supports,
+brims, the author's per-object settings) is kept.
 
-| Recette | Couche | Parois | Remplissage | Dessus / dessous | Accélérations |
+| Recipe | Layer | Walls | Infill | Top / bottom | Accelerations |
 |---|---|---|---|---|---|
-| `qualite` | 0,16 mm | du projet | du projet | du projet | douces : mur 3 000, dessus 1 500 |
-| `equilibre` | 0,20 mm | du projet | du projet | du projet | standard : 10 000, mur 5 000, dessus 2 000 |
-| `vitesse` | 0,28 mm | 2 | adaptive cubic 12 % | 4 / 3 | franches : 14 000, mur 7 000 |
-| `solidite` | 0,20 mm | 4 | gyroïde 25 % | 5 / 4 | du projet |
-| `leger` | 0,24 mm | 2 | adaptive cubic 10 % | 4 / 3 | 12 000, mur 6 000 |
+| `quality` | 0.16 mm | project's | project's | project's | gentle: wall 3,000, top 1,500 |
+| `balanced` | 0.20 mm | project's | project's | project's | standard: 10,000, wall 5,000, top 2,000 |
+| `speed` | 0.28 mm | 2 | adaptive cubic 12 % | 4 / 3 | brisk: 14,000, wall 7,000 |
+| `strength` | 0.20 mm | 4 | gyroid 25 % | 5 / 4 | project's |
+| `light` | 0.24 mm | 2 | adaptive cubic 10 % | 4 / 3 | 12,000, wall 6,000 |
 
-Quelques choix assumés :
+A few deliberate choices:
 
-- **Pas de remplissage lightning** : il laisse les couches du dessus en pont sur de grands vides.
-  L'adaptive cubic garde l'essentiel du gain de poids sans ce défaut.
-- **Peu de jeu sur les vitesses** : en PLA, le débit max du filament (15 à 22 mm³/s) plafonne déjà
-  les vitesses. Les recettes jouent donc sur les accélérations, ramenées au besoin à 75 % du maximum
-  de ton imprimante (9 000 mm/s² sur une A1, qui plafonne à 12 000).
+- **No lightning infill**: it leaves top layers bridging over large gaps. Adaptive cubic keeps most
+  of the weight saving without that flaw.
+- **Little room on speeds**: in PLA, the filament's max flow (15 to 22 mm³/s) already caps speeds.
+  Recipes therefore play on accelerations, brought down to 75 % of your printer's maximum when needed
+  (9,000 mm/s² on an A1, which tops out at 12,000).
 
-### Le filament
+### Filament
 
-Avec le skill, Claude te demande toujours ton filament avant de slicer, même si le fichier en
-contient un, en proposant d'abord ton filament habituel. Les presets suivent ton imprimante
-(`Bambu PLA Basic @BBL A1` sur une A1, par exemple). Sur un projet 3MF, le preset choisi remplace le filament du projet sur tous ses
-emplacements, et les réglages d'impression de l'auteur restent.
+With the skill, Claude always asks for your filament before slicing, even if the file has one,
+offering your usual filament first. Presets follow your printer (`Bambu PLA Basic @BBL A1` on an A1,
+for example). On a 3MF project, the chosen preset replaces the project's filament in every slot,
+and the author's print settings are kept.
 
-### L'imprimante
+### Printer
 
-Tous les slices visent ton imprimante par défaut. Un projet fait pour un autre modèle est converti
-avant le slice : seule la partie imprimante change (G-code de départ et de fin, modèle, buse). Un STL
-sans presets reçoit ton imprimante, son process standard et ton filament habituel. L'analyse de pièce
-utilise le volume d'impression de ton imprimante (180 × 180 × 180 mm pour une A1 mini, par exemple).
+Every slice targets your default printer. A project made for another model is converted before
+slicing: only the printer part changes (start and end G-code, model, nozzle). An STL without presets
+gets your printer, its standard process and your usual filament. The part analysis uses your
+printer's build volume (180 × 180 × 180 mm for an A1 mini, for example).
 
-### Les fichiers produits
+### Output files
 
 ```text
 output/
-├── <projet>/
-│   ├── original/<date-heure>/result.3mf
-│   ├── equilibre/<date-heure>/result.3mf
+├── <project>/
+│   ├── original/<timestamp>/result.3mf
+│   ├── balanced/<timestamp>/result.3mf
 │   └── …
-├── .cache/          slices déjà faits (supprimer le dossier pour le vider)
-└── history.jsonl    une ligne par slice
+├── .cache/          slices already done (delete the folder to clear it)
+└── history.jsonl    one line per slice
 ```
 
-- **Un seul `result.3mf` par variante**, avec tous les plateaux et leur G-code.
-- **Cache** : un slice identique (mêmes modèles, réglages, presets et version de Bambu Studio) est
-  rendu instantanément.
-- **Parallélisme** : un Bambu Studio par paire de cœurs (6 sur un processeur à 12 cœurs).
-- **Relance** : si Bambu Studio se fige (rare), le slice est relancé une fois, puis abandonné avec un
-  message clair.
+- **One `result.3mf` per variant**, with every plate and its G-code.
+- **Cache**: an identical slice (same models, settings, presets and Bambu Studio version) comes
+  back instantly.
+- **Parallelism**: one Bambu Studio per two cores (6 on a 12-core CPU).
+- **Retry**: if Bambu Studio hangs (rare), the slice is retried once, then dropped with a clear message.
 
-## Sécurité
+## Safety
 
-- Aucune impression n'est lancée : `printer_status` est en lecture seule.
-- Les fichiers d'origine ne sont jamais modifiés : les résultats vont dans `output\`, et `edit_3mf`
-  écrit une copie (sauf si on lui donne le même chemin en sortie ; une copie `.backup` est alors faite).
-- `save_preset` sauvegarde l'ancien preset dans `backups\` avant d'écrire. Redémarre Bambu Studio
-  pour qu'il voie un preset modifié.
-- Le code d'accès de l'imprimante donne son contrôle en local : `config.json` doit rester sur ton PC
-  (il est exclu de git).
+- No print is ever started: `printer_status` is read-only.
+- Original files are never modified: results go to `output\`, and `edit_3mf` writes a copy (unless
+  given the same path as output; a `.backup` copy is then made).
+- `save_preset` backs up the old preset in `backups\` before writing. Restart Bambu Studio so it sees
+  a modified preset.
+- The printer's access code gives local control of it: `config.json` must stay on your PC (it is
+  excluded from git).
 
-## Limites connues
+## Known limitations
 
-- **Windows uniquement** pour l'instant (chemins Windows, `taskkill`, `tasklist`).
-- Recettes et conseils matériaux calibrés sur une **P1S avec buse 0,4 mm** : ils restent valables sur
-  les autres Bambu, mais n'y ont pas été affinés.
-- Les fichiers `.step` et `.obj` ne sont pas lus : ouvre-les dans Bambu Studio et enregistre-les en 3MF.
-- L'analyse des surplombs est une estimation géométrique : les avertissements du slicer font foi.
-- La couleur du filament n'est pas réglée : associe l'emplacement AMS à l'ouverture dans Bambu Studio.
+- **Windows only** for now (Windows paths, `taskkill`, `tasklist`).
+- Recipes and material advice are tuned on a **0.4 mm nozzle** (on a P1S): they remain valid on other
+  Bambu printers, but have not been fine-tuned there.
+- `.step` and `.obj` files are not read: open them in Bambu Studio and save them as 3MF.
+- The overhang analysis is a geometric estimate: the slicer's warnings are the reference.
+- Filament color is not set: map the AMS slot when opening the file in Bambu Studio.
 
-## Dépannage
+## Troubleshooting
 
-| Problème | Solution |
+| Problem | Fix |
 |---|---|
-| `Bambu Studio introuvable` | Installe Bambu Studio, ou indique son dossier dans `bambu_studio_dir` |
-| Les outils n'apparaissent pas dans Claude | Vérifie les deux chemins de la déclaration (étape 3), puis redémarre Claude |
-| `Preset … introuvable` | Lance Bambu Studio une fois, connecte-toi à ton compte, puis réessaie (les noms proches sont proposés) |
-| Le slice reste bloqué | Ferme les `bambu-studio.exe` restés ouverts dans le Gestionnaire des tâches |
-| `printer_status` échoue | Vérifie l'IP, le code d'accès, le mode LAN et que le PC est sur le même réseau |
-| Un changement du code n'est pas pris en compte | Redémarre Claude : le serveur est chargé au démarrage |
+| `Bambu Studio not found` | Install Bambu Studio, or set its folder in `bambu_studio_dir` |
+| The tools do not show up in Claude | Check both paths in the registration (step 3), then restart Claude |
+| `… preset not found` | Launch Bambu Studio once, sign in to your account, then try again (close names are suggested) |
+| A slice hangs | Close any `bambu-studio.exe` left running in Task Manager |
+| `printer_status` fails | Check the IP, the access code, LAN mode and that the PC is on the same network |
+| A code change is not picked up | Restart Claude: the server is loaded at startup |
 
-## Développement
+## Development
 
 ```powershell
 .venv\Scripts\python.exe -m pip install -r requirements-dev.txt
@@ -308,23 +301,23 @@ output/
 .venv\Scripts\python.exe -m pyflakes bambu_mcp tests
 ```
 
-Les tests unitaires (géométrie, contrôles, cache, historique) prennent moins d'une seconde. Les tests
-d'intégration slicent de vrais modèles avec Bambu Studio (environ 20 s) et sont ignorés s'il n'est
-pas installé. Les modèles de test sont générés à la volée : aucun fichier à fournir.
+Unit tests (geometry, checks, cache, history) take under a second. Integration tests slice real
+models with Bambu Studio (about 20 s) and are skipped if it is not installed. Test models are
+generated on the fly: no file to provide.
 
 ```text
 bambu_mcp/
-├── server.py      outils MCP exposés à Claude
-├── slicer.py      appel de la CLI Bambu Studio, recettes, comparaisons, cache
-├── prepare.py     préparation complète d'un STL / 3MF
-├── threemf.py     lecture et modification des projets 3MF
-├── presets.py     presets système et utilisateur, héritage, écriture
-├── geometry.py    analyse géométrique et orientation
-├── analysis.py    contrôles des réglages
-├── defaults.py    imprimante, plateau et filament par défaut
-├── materials.py   conseils par matériau
-├── printer.py     état de l'imprimante (MQTT, lecture seule)
-├── history.py     historique des slices
-└── config.py      chemins et config.json
-skills/impression-3d/SKILL.md   skill Claude Code
+├── server.py      MCP tools exposed to Claude
+├── slicer.py      Bambu Studio CLI calls, recipes, comparisons, cache
+├── prepare.py     end-to-end preparation of an STL / 3MF
+├── threemf.py     reading and editing 3MF projects
+├── presets.py     system and user presets, inheritance, writing
+├── geometry.py    geometric analysis and orientation
+├── analysis.py    settings checks
+├── materials.py   advice per material
+├── defaults.py    default printer, build plate and filament
+├── printer.py     printer status (MQTT, read-only)
+├── history.py     slice history
+└── config.py      paths and config.json
+skills/3d-printing/SKILL.md   Claude Code skill
 ```

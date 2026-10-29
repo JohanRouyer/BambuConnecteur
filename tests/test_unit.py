@@ -1,4 +1,4 @@
-"""Logique pure : contrôles, normalisation des réglages, cache, historique, matériaux."""
+"""Pure logic: checks, settings normalization, cache, history, materials."""
 import json
 
 import pytest
@@ -18,41 +18,41 @@ def test_flow_and_capped_speed():
     assert "capped_speed" not in rows["outer_wall"]
     assert rows["inner_wall"]["flow_mm3_s"] == pytest.approx(27.0)
     assert rows["inner_wall"]["capped_speed"] == round(21 / (0.45 * 0.2))
-    assert "support" not in rows  # supports désactivés
+    assert "support" not in rows  # supports disabled
 
 
 def test_line_width_percent_and_auto():
     ps = dict(PS, outer_wall_line_width="110%", inner_wall_line_width="0")
     rows = {r["feature"]: r for r in analysis.flow_check(ps)}
     assert rows["outer_wall"]["flow_mm3_s"] == pytest.approx(200 * 0.44 * 0.2, abs=0.1)
-    assert rows["inner_wall"]["flow_mm3_s"] == pytest.approx(300 * 0.42 * 0.2, abs=0.1)  # retombe sur line_width
+    assert rows["inner_wall"]["flow_mm3_s"] == pytest.approx(300 * 0.42 * 0.2, abs=0.1)  # falls back to line_width
 
 
 def test_goal_accelerations_stay_within_p1s_limits():
     for name, recipe in slicer.GOALS.items():
         for key in ("default_acceleration", "outer_wall_acceleration", "top_surface_acceleration"):
-            assert int(recipe.get(key, "0")) <= 15000, (name, key)  # P1S : 20 000 max, marge gardée.
+            assert int(recipe.get(key, "0")) <= 15000, (name, key)  # P1S: 20,000 max, margin kept.
         assert int(recipe.get("top_surface_acceleration", "0")) <= int(recipe.get("outer_wall_acceleration", "5000"))
 
 
 def test_lightning_infill_is_flagged():
-    assert any("lightning" in w for w in analysis.warnings(dict(PS, sparse_infill_pattern="lightning")))
+    assert any("lightning" in w.lower() for w in analysis.warnings(dict(PS, sparse_infill_pattern="lightning")))
     assert all(r["sparse_infill_pattern"] != "lightning" for r in slicer.GOALS.values() if "sparse_infill_pattern" in r)
 
 
 def test_clean_settings_have_only_flow_warning():
     w = analysis.warnings(PS)
-    assert len(w) == 1 and "Débit max" in w[0]
+    assert len(w) == 1 and "max flow" in w[0]
 
 
 @pytest.mark.parametrize("change, expected", [
     ({"slow_down_layer_time": ["0"]}, "slow_down_layer_time = 0"),
-    ({"slow_down_for_layer_cooling": ["0"]}, "désactivé"),
-    ({"layer_height": "0.32"}, "trop épaisse"),
-    ({"wall_loops": "1"}, "Une seule paroi"),
-    ({"outer_wall_speed": ["600"]}, "maximum machine"),
-    ({"filament_type": ["ABS"]}, "délaminage"),
-    ({"filament_type": ["TPU"]}, "bobine externe"),
+    ({"slow_down_for_layer_cooling": ["0"]}, "disabled"),
+    ({"layer_height": "0.32"}, "too thick"),
+    ({"wall_loops": "1"}, "single wall"),
+    ({"outer_wall_speed": ["600"]}, "machine maximum"),
+    ({"filament_type": ["ABS"]}, "delamination"),
+    ({"filament_type": ["TPU"]}, "external spool"),
 ])
 def test_warnings(change, expected):
     assert any(expected in w for w in analysis.warnings(dict(PS, **change)))
@@ -76,9 +76,9 @@ def test_apply_settings_unknown_and_known():
 
 
 def test_unique_dirs_do_not_collide(isolated_output):
-    dirs = {slicer._unique_dir("x", "vitesse", "20260101-000000") for _ in range(3)}
+    dirs = {slicer._unique_dir("x", "speed", "20260101-000000") for _ in range(3)}
     assert len(dirs) == 3
-    assert all(d.parent == isolated_output / "x" / "vitesse" for d in dirs)
+    assert all(d.parent == isolated_output / "x" / "speed" for d in dirs)
 
 
 def test_unique_dir_sanitizes_names(isolated_output):
@@ -99,12 +99,12 @@ def test_cache_roundtrip_and_invalidation(isolated_output):
 
 def test_history_order_and_search():
     summary = {"return_code": 0, "plates": [{"time_s": 3700, "filament_g": 9.5}], "checks": ["a"]}
-    history.record(["C:/a/benchy.3mf"], summary, None, None, None, {}, "equilibre")
+    history.record(["C:/a/benchy.3mf"], summary, None, None, None, {}, "balanced")
     history.record(["C:/a/support.stl"], summary, None, None, None, {"layer_height": "0.2"}, None)
     rows = history.read()
     assert [r["models"][0][-11:] for r in rows] == ["support.stl", "/benchy.3mf"]
     assert rows[0]["time"] == "1h01" and rows[0]["checks"] == 1
-    assert len(history.read(search="benchy equilibre")) == 1
+    assert len(history.read(search="benchy balanced")) == 1
     assert len(history.read(limit=1)) == 1
 
 

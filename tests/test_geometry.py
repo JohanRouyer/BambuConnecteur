@@ -19,11 +19,11 @@ def test_stl_cube(tmp_path, ascii):
 def test_too_big_for_p1s(tmp_path):
     a = geometry.analyze(str(write_stl(box(300, 300, 300), tmp_path / "big.stl")))
     assert not any(r["fits_bed"] for r in a["orientations"])
-    assert any("Trop grand" in x for x in a["advice"])
+    assert any("Too big" in x for x in a["advice"])
 
 
 def test_tall_part_fits_lying_down(tmp_path):
-    # 252 mm : trop haut debout (max 250) mais tient couché (plateau 256).
+    # 252 mm: too tall standing (max 250) but fits lying down (256 bed).
     a = geometry.analyze(str(write_stl(box(20, 20, 252), tmp_path / "tall.stl")))
     assert not a["current"]["fits_bed"]
     best = next(r for r in a["orientations"] if r["orientation"] == a["best_orientation"])
@@ -33,15 +33,15 @@ def test_tall_part_fits_lying_down(tmp_path):
 def test_overhang_and_best_orientation(tmp_path):
     a = geometry.analyze(str(write_stl(funnel(), tmp_path / "f.stl")))
     assert a["current"]["needs_support"]
-    assert a["best_orientation"] == "retourné"
-    flipped = next(r for r in a["orientations"] if r["orientation"] == "retourné")
+    assert a["best_orientation"] == "upside down"
+    flipped = next(r for r in a["orientations"] if r["orientation"] == "upside down")
     assert not flipped["needs_support"]
     assert flipped["base_area_mm2"] == pytest.approx(2500)
 
 
 def test_horizontal_faces_are_bridges(tmp_path):
-    # Table : plateau 40 x 40 posé sur un pied central de 10 x 10 (deux boîtes non soudées :
-    # le dessous du plateau compte en entier).
+    # Table: a 40 x 40 top on a 10 x 10 central leg (two boxes that are not merged:
+    # the whole underside of the top counts).
     tris = np.concatenate([box(10, 10, 20) + [15, 15, 0], box(40, 40, 5) + [0, 0, 20]])
     a = geometry.analyze(str(write_stl(tris, tmp_path / "t.stl")))
     assert a["current"]["bridge_area_mm2"] == pytest.approx(1600, abs=1)
@@ -52,12 +52,12 @@ def test_rotated_stl_sits_on_bed(tmp_path):
     out = geometry.write_rotated_stl(str(write_stl(funnel(), tmp_path / "f.stl")), 180, 0, tmp_path / "r.stl")
     tris = geometry.load(str(out))
     assert tris[:, :, 2].min() == pytest.approx(0, abs=1e-4)
-    assert geometry.analyze(str(out))["best_orientation"] == "tel quel"
+    assert geometry.analyze(str(out))["best_orientation"] == "as is"
 
 
 @pytest.mark.parametrize("split", [False, True])
 def test_3mf_with_build_transform(tmp_path, split):
-    # Rotation de 90° autour de Z puis translation, au format 3MF (vecteurs ligne).
+    # 90° rotation around Z then translation, in 3MF format (row vectors).
     path = write_3mf(box(10, 20, 30), tmp_path / "m.3mf", "0 1 0 -1 0 0 0 0 1 100 50 0", split)
     tris = geometry.load(str(path))
     mins, maxs = tris.reshape(-1, 3).min(axis=0), tris.reshape(-1, 3).max(axis=0)

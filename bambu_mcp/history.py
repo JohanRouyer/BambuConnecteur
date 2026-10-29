@@ -1,15 +1,15 @@
-"""Historique des slices : une ligne JSON par slice dans output/history.jsonl."""
+"""Slice history: one JSON line per slice in output/history.jsonl."""
 import json
 import threading
 import time
 
 from . import config
 
-_lock = threading.Lock()  # compare_slices écrit depuis plusieurs threads
+_lock = threading.Lock()  # compare_slices writes from several threads
 
 
 def duration(seconds: int) -> str:
-    """Durée au format Bambu Studio : 1h05."""
+    """Duration in Bambu Studio format: 1h05."""
     return f"{seconds // 3600}h{(seconds % 3600) // 60:02d}"
 
 
@@ -33,7 +33,7 @@ def record(models: list, summary: dict, machine: str | None, process: str | None
 
 
 def read(limit: int = 20, search: str | None = None) -> list[dict]:
-    """Derniers slices, plus récents d'abord ; `search` filtre sur les noms de modèles et le label."""
+    """Latest slices, newest first; `search` filters on model names and the label."""
     path = _file()
     if not path.exists():
         return []

@@ -1,15 +1,15 @@
-# Environnement Python
+# Python environment
 .venv/
 __pycache__/
 .pytest_cache/
 *.pyc
 
-# Résultats de slicing (et leur cache) et sauvegardes de presets
+# Slicing results (and their cache) and preset backups
 output/
 backups/
 
-# Config locale (code d'accès de l'imprimante) : voir config.example.json
+# Local config (printer access code): see config.example.json
 config.json
 
-# Restes de la CLI Bambu Studio lancée dans ce dossier
+# Leftovers of the Bambu Studio CLI run in this folder
 /result.json
