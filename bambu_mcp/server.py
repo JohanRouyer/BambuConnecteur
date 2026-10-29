@@ -5,7 +5,7 @@ from typing import Literal
 from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
-from . import config, presets, printer, slicer, threemf
+from . import analysis, config, presets, printer, slicer, threemf
 
 Kind = Literal["process", "filament", "machine"]
 EXPECTED_ERRORS = (KeyError, ValueError, OSError, TimeoutError, RecursionError)
@@ -110,6 +110,34 @@ def slice_model(models: list[str], machine: str | None = None, process: str | No
     `plate` 0 = tous les plateaux. `bed_type` ex. "Textured PEI Plate"."""
     return slicer.run(models, machine, process, filaments, process_overrides, filament_overrides,
                       plate, bed_type, orient, arrange)
+
+
+@mcp.tool()
+def compare_slices(models: list[str], variants: dict[str, dict], include_original: bool = True,
+                   machine: str | None = None, process: str | None = None,
+                   filaments: list[str] | None = None, plate: int = 0,
+                   bed_type: str | None = None) -> dict:
+    """Slice plusieurs variantes EN PARALLÈLE en un seul appel : {nom: {réglage: valeur}}.
+    Renvoie temps, poids, écart en % avec l'original et contrôles de chaque variante.
+    Sur un 3MF sans `machine`, les réglages s'appliquent au projet (l'original n'est pas modifié)."""
+    return slicer.compare(models, variants, include_original, machine, process, filaments, plate, bed_type)
+
+
+@mcp.tool()
+def optimize(models: list[str], goal: Literal["qualite", "equilibre", "vitesse", "solidite", "leger"],
+             machine: str | None = None, process: str | None = None,
+             filaments: list[str] | None = None, plate: int = 0, bed_type: str | None = None,
+             compare_all: bool = True) -> dict:
+    """Recettes P1S prêtes à l'emploi : slice l'original et les 5 objectifs en parallèle,
+    puis désigne la variante de `goal`. `compare_all` false : seulement l'original et `goal`."""
+    return slicer.optimize(models, goal, machine, process, filaments, plate, bed_type, compare_all)
+
+
+@mcp.tool()
+def check_settings(path: str) -> dict:
+    """Contrôle un projet 3MF sans slicer : débit volumétrique par type de ligne (vitesse réelle
+    quand le débit max du filament plafonne), vitesses machine, refroidissement, pièges par matériau."""
+    return analysis.check_3mf(path)
 
 
 @mcp.tool()

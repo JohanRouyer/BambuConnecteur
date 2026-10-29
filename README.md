@@ -14,11 +14,15 @@ projets 3MF, slicer pour comparer des réglages et lire l'état de ta P1S en ré
 | `inspect_3mf` | Résumé d'un 3MF : presets, objets, plateaux, résultats de slicing |
 | `get_3mf_settings` | Réglages d'un projet 3MF |
 | `edit_3mf` | Copie modifiée d'un 3MF (`<nom>_claude.3mf`), réglages globaux ou par objet |
-| `slice_model` | Slice via `bambu-studio.exe` : temps, poids, avertissements ; transforme aussi un STL ou un 3MF « géométrie seule » en projet Bambu complet |
+| `slice_model` | Slice via `bambu-studio.exe` : temps, poids, avertissements, contrôles ; transforme aussi un STL ou un 3MF « géométrie seule » en projet Bambu complet |
+| `compare_slices` | Slice plusieurs variantes en parallèle en un appel : tableau temps / poids / écart avec l'original |
+| `optimize` | Recettes P1S (`qualite`, `equilibre`, `vitesse`, `solidite`, `leger`) comparées en parallèle, avec la variante conseillée |
+| `check_settings` | Contrôle un 3MF sans slicer : débit volumétrique et vitesse réelle par type de ligne, refroidissement, pièges par matériau |
 | `printer_status` | État de la P1S (températures, progression, AMS, erreurs HMS), en lecture seule |
 | `connector_info` | Chemins utilisés et état de la config |
 
-Les résultats de slicing vont dans `output/`.
+Les résultats de slicing vont dans `output/`. Un slice identique (mêmes modèles, réglages, presets et
+version de Bambu Studio) est renvoyé depuis le cache `output/.cache/` ; supprimer ce dossier le vide.
 
 ## Imprimante (facultatif)
 
