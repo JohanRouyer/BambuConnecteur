@@ -182,9 +182,32 @@ def normalize(current, value):
     return _to_str(value)
 
 
-def apply_settings(base: dict, settings: dict, allow_new_keys: bool = False) -> tuple[dict, list]:
-    """Normalise `settings` par rapport à `base`. Renvoie (réglages normalisés, changements)."""
-    unknown = [k for k in settings if k not in base and not allow_new_keys]
+@lru_cache(maxsize=None)
+def _profile_keys(kind: str) -> frozenset:
+    return frozenset(k for _, data in _system_index()[kind].values() for k in data if k not in META_KEYS)
+
+
+@lru_cache(maxsize=None)
+def known_keys(kind: str) -> frozenset:
+    """Réglages valides pour un type. Un preset n'écrit pas les réglages restés à leur valeur
+    par défaut (brim_type…) : ceux-là viennent de settings_keys.json, la liste complète d'un projet
+    exporté par Bambu Studio, rangés côté filament s'ils commencent par filament_, sinon côté process."""
+    _check_type(kind)
+    own = _profile_keys(kind)
+    if kind == "machine":
+        return own
+    others = _profile_keys("machine") | _profile_keys("filament" if kind == "process" else "process")
+    extra = {k for k in json.loads((Path(__file__).parent / "settings_keys.json").read_text(encoding="utf-8"))
+             if k not in others and k not in own}
+    side = {k for k in extra if k.startswith("filament_") == (kind == "filament")}
+    return own | side
+
+
+def apply_settings(base: dict, settings: dict, allow_new_keys: bool = False,
+                   known: frozenset | None = None) -> tuple[dict, list]:
+    """Normalise `settings` par rapport à `base`. Renvoie (réglages normalisés, changements).
+    `known` : clés acceptées même absentes de `base`."""
+    unknown = [k for k in settings if k not in base and not allow_new_keys and k not in (known or ())]
     if unknown:
         suggestions = {k: difflib.get_close_matches(k, list(base), n=3, cutoff=0.6) for k in unknown}
         raise KeyError(f"Réglages inconnus : {suggestions}")

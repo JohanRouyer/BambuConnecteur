@@ -18,6 +18,9 @@ projets 3MF, slicer pour comparer des réglages et lire l'état de ta P1S en ré
 | `compare_slices` | Slice plusieurs variantes en parallèle en un appel : tableau temps / poids / écart avec l'original |
 | `optimize` | Recettes P1S (`qualite`, `equilibre`, `vitesse`, `solidite`, `leger`) comparées en parallèle, avec la variante conseillée |
 | `check_settings` | Contrôle un 3MF sans slicer : débit volumétrique et vitesse réelle par type de ligne, refroidissement, pièges par matériau |
+| `prepare_print` | STL / 3MF → projet P1S prêt en un appel : orientation, preset du matériau, plateau, supports, bordure, copies, slice |
+| `analyze_model` | Géométrie d'un STL / 3MF : dimensions, volume, surplombs et ponts selon 6 orientations, meilleure orientation |
+| `material_guide` | Conseils P1S par matériau : preset, plateaux et températures, capot / porte, AMS, buse, séchage |
 | `printer_status` | État de la P1S (températures, progression, AMS, erreurs HMS), en lecture seule |
 | `connector_info` | Chemins utilisés et état de la config |
 
@@ -37,6 +40,10 @@ Le code d'accès donne le contrôle local de l'imprimante : ce fichier doit rest
 ## Remarques
 
 - Redémarre Bambu Studio après une modification de preset pour qu'il la voie.
+- L'analyse de surplombs est une estimation géométrique (plus de 60° par rapport à la verticale ;
+  les faces horizontales comptent comme des ponts) : les avertissements du slicer font foi.
+- `bambu_mcp/settings_keys.json` liste tous les réglages d'un projet Bambu Studio : il permet de
+  modifier par preset des réglages restés à leur valeur par défaut (`brim_type`…).
 - `edit_3mf` n'écrase jamais l'original, sauf si on lui donne le même chemin en sortie (une copie `.backup` est alors faite).
 - Le connecteur ne lance jamais d'impression : tu ouvres le 3MF produit dans Bambu Studio et tu imprimes toi-même.
 

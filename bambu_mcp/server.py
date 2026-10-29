@@ -5,7 +5,7 @@ from typing import Literal
 from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
-from . import analysis, config, presets, printer, slicer, threemf
+from . import analysis, config, geometry, materials, prepare, presets, printer, slicer, threemf
 
 Kind = Literal["process", "filament", "machine"]
 EXPECTED_ERRORS = (KeyError, ValueError, OSError, TimeoutError, RecursionError)
@@ -138,6 +138,33 @@ def check_settings(path: str) -> dict:
     """Contrôle un projet 3MF sans slicer : débit volumétrique par type de ligne (vitesse réelle
     quand le débit max du filament plafonne), vitesses machine, refroidissement, pièges par matériau."""
     return analysis.check_3mf(path)
+
+
+@mcp.tool()
+def analyze_model(path: str) -> dict:
+    """Géométrie d'un STL ou 3MF : dimensions, volume, tient-il sur la P1S, assise, surplombs
+    et ponts pour 6 orientations, meilleure orientation et conseils (supports, bordure)."""
+    return geometry.analyze(path)
+
+
+@mcp.tool()
+def material_guide(material: str | None = None, filament: str | None = None) -> dict:
+    """Conseils P1S par matériau (PLA, PETG, ABS, ASA, PC, TPU, PA-CF, …) : preset filament,
+    plateaux et températures, capot / porte, AMS, buse, séchage. Sans `material` : la liste."""
+    return materials.guide(material, filament)
+
+
+@mcp.tool()
+def prepare_print(models: list[str], material: str = "PLA",
+                  goal: Literal["qualite", "equilibre", "vitesse", "solidite", "leger"] = "equilibre",
+                  copies: int = 1, orientation: Literal["auto", "as_is"] = "auto",
+                  supports: Literal["auto", "on", "off"] = "auto", bed_type: str | None = None,
+                  filament: str | None = None, extra_settings: dict | None = None) -> dict:
+    """De STL / 3MF à projet P1S prêt à imprimer en un appel : analyse, meilleure orientation,
+    presets du matériau, plateau, supports et bordure si nécessaires, copies disposées, slice.
+    Renvoie temps, poids, décisions prises, avertissements et le result.3mf à ouvrir dans Bambu Studio."""
+    return prepare.prepare(models, material, goal, copies, orientation, supports, bed_type,
+                           filament, extra_settings)
 
 
 @mcp.tool()

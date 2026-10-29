@@ -18,7 +18,7 @@ def _flatten(kind: str, name: str, overrides: dict | None, dest: Path) -> list:
     cfg = presets.resolve(kind, name)
     changes = []
     if overrides:
-        normalized, changes = presets.apply_settings(cfg, overrides)
+        normalized, changes = presets.apply_settings(cfg, overrides, known=presets.known_keys(kind))
         cfg.update(normalized)
     cfg.update({"name": name, "type": kind, "from": "system", "inherits": "",
                 "version": presets.find(kind, name)[2].get("version", "")})
@@ -206,8 +206,9 @@ def _split(settings: dict, machine: str | None, process: str | None,
     Une clé inconnue des deux reste côté process, pour que l'erreur propose les bons noms."""
     if not (machine and process):
         return settings, {}
-    filament_keys = presets.resolve("filament", filaments[0]) if filaments else {}
-    process_keys = presets.resolve("process", process)
+    filament_keys = (presets.resolve("filament", filaments[0]).keys() | presets.known_keys("filament")
+                     if filaments else set())
+    process_keys = presets.resolve("process", process).keys() | presets.known_keys("process")
     unknown = [k for k in settings if k not in process_keys and k not in filament_keys]
     if unknown and not filaments:
         raise ValueError(f"Réglages absents du process {unknown} : réglages filament (indiquer `filaments`) "
