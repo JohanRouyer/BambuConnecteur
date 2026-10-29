@@ -5,7 +5,7 @@ from typing import Literal
 from mcp.server import MCPServer
 from mcp.server.mcpserver.exceptions import ToolError
 
-from . import analysis, config, geometry, materials, prepare, presets, printer, slicer, threemf
+from . import analysis, config, geometry, history, materials, prepare, presets, printer, slicer, threemf
 
 Kind = Literal["process", "filament", "machine"]
 EXPECTED_ERRORS = (KeyError, ValueError, OSError, TimeoutError, RecursionError)
@@ -165,6 +165,13 @@ def prepare_print(models: list[str], material: str = "PLA",
     Renvoie temps, poids, décisions prises, avertissements et le result.3mf à ouvrir dans Bambu Studio."""
     return prepare.prepare(models, material, goal, copies, orientation, supports, bed_type,
                            filament, extra_settings)
+
+
+@mcp.tool()
+def slice_history(limit: int = 20, search: str | None = None) -> list[dict]:
+    """Derniers slices (plus récents d'abord) : modèles, presets, réglages modifiés, temps, poids,
+    nombre de contrôles et result.3mf. `search` : mots du nom de modèle ou du label."""
+    return history.read(limit, search)
 
 
 @mcp.tool()

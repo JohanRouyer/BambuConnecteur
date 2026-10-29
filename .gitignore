@@ -1,6 +1,7 @@
 # Environnement Python
 .venv/
 __pycache__/
+.pytest_cache/
 *.pyc
 
 # Résultats de slicing (et leur cache) et sauvegardes de presets

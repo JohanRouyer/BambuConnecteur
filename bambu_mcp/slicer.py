@@ -10,7 +10,7 @@ import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from . import analysis, config, presets, threemf
+from . import analysis, config, history, presets, threemf
 
 
 def _flatten(kind: str, name: str, overrides: dict | None, dest: Path) -> list:
@@ -30,7 +30,7 @@ def run(models: list[str], machine: str | None = None, process: str | None = Non
         filaments: list[str] | None = None, process_overrides: dict | None = None,
         filament_overrides: dict | None = None, plate: int = 0,
         bed_type: str | None = None, orient: bool = False, arrange: bool = False,
-        label: str | None = None, timeout_s: int = 900) -> dict:
+        label: str | None = None, timeout_s: int = 300) -> dict:
     """Lance bambu-studio.exe. Sans presets, un 3MF Bambu garde ses propres réglages.
     Un slice identique déjà fait est renvoyé depuis le cache (`cached`: true)."""
     exe = config.executable()
@@ -91,13 +91,26 @@ def run(models: list[str], machine: str | None = None, process: str | None = Non
     args += ["--export-3mf", "result.3mf", "--outputdir", "out"] + local_models
 
     key = _cache_key(exe, args, project_overrides, model_paths, work)
+    overrides = {**(filament_overrides or {}), **(process_overrides or {})}
     cached = _cache_get(key)
     if cached:
         shutil.rmtree(work, ignore_errors=True)
+        history.record(model_paths, cached, machine, process, filaments, overrides, label)
         return cached
 
     started = time.time()
-    proc = subprocess.run(args, cwd=work, capture_output=True, text=True, timeout=timeout_s)
+    try:
+        proc = _run_cli(args, work, timeout_s)
+    except subprocess.TimeoutExpired:
+        # Bambu Studio se fige parfois sans raison (0 % CPU) : un second essai passe en général.
+        shutil.rmtree(work / "out", ignore_errors=True)
+        try:
+            proc = _run_cli(args, work, timeout_s)
+        except subprocess.TimeoutExpired:
+            shutil.rmtree(work, ignore_errors=True)
+            raise TimeoutError(f"Bambu Studio n'a pas répondu en {timeout_s} s, deux fois de suite. "
+                               "Fermer les bambu-studio.exe restés ouverts (Gestionnaire des tâches) "
+                               "et réessayer.") from None
     elapsed = round(time.time() - started, 1)
 
     out_dir = work / "out"
@@ -137,7 +150,23 @@ def run(models: list[str], machine: str | None = None, process: str | None = Non
         summary["stderr"] = (proc.stderr or proc.stdout or "")[-3000:]
     else:
         _cache_put(key, summary)
+    history.record(model_paths, summary, machine, process, filaments, overrides, label)
     return summary
+
+
+def _run_cli(args: list, work: Path, timeout_s: int) -> subprocess.CompletedProcess:
+    proc = subprocess.Popen(args, cwd=work, stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
+    try:
+        out, err = proc.communicate(timeout=timeout_s)
+    except subprocess.TimeoutExpired:
+        # Tuer tout l'arbre : la CLI peut avoir lancé des processus enfants.
+        subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True)
+        try:
+            proc.communicate(timeout=10)
+        except subprocess.TimeoutExpired:
+            pass
+        raise
+    return subprocess.CompletedProcess(args, proc.returncode, out, err)
 
 
 def _unique_dir(name: str) -> Path:
