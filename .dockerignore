@@ -1,0 +1,7 @@
+.venv/
+.git/
+output/
+backups/
+config.json
+tests/
+docs/
