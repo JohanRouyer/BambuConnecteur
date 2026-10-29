@@ -84,8 +84,8 @@ Run the following commands in **PowerShell**.
 ### 1. Get the project
 
 ```powershell
-git clone https://github.com/JohanRouyer/BambuConnecteur.git
-cd BambuConnecteur
+git clone https://github.com/JohanRouyer/BambuStudio-Advisor-MCP.git
+cd BambuStudio-Advisor-MCP
 ```
 
 Put the folder wherever you like, but **do not move it afterwards**: Claude starts it by its full path.
@@ -112,8 +112,8 @@ path with your folder's (with doubled backslashes):
 {
   "mcpServers": {
     "bambu-studio": {
-      "command": "C:\\path\\to\\BambuConnecteur\\.venv\\Scripts\\python.exe",
-      "args": ["C:\\path\\to\\BambuConnecteur\\run_server.py"]
+      "command": "C:\\path\\to\\BambuStudio-Advisor-MCP\\.venv\\Scripts\\python.exe",
+      "args": ["C:\\path\\to\\BambuStudio-Advisor-MCP\\run_server.py"]
     }
   }
 }
