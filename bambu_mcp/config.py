@@ -7,11 +7,23 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_FILE = ROOT / "config.json"
 
+# Imprimante cible de tous les slices, et process de départ compatible (les presets P1S réutilisent ceux de la X1C).
+DEFAULT_MACHINE = "Bambu Lab P1S 0.4 nozzle"
+DEFAULT_PROCESS = "0.20mm Standard @BBL X1C"
+
 
 def load() -> dict:
     if CONFIG_FILE.exists():
         return json.loads(CONFIG_FILE.read_text(encoding="utf-8-sig"))
     return {}
+
+
+def default_machine() -> str:
+    return load().get("default_machine") or DEFAULT_MACHINE
+
+
+def default_process() -> str:
+    return load().get("default_process") or DEFAULT_PROCESS
 
 
 def install_dir() -> Path:

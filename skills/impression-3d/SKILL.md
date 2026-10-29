@@ -41,7 +41,13 @@ Réponds en français, tutoie l'utilisateur.
 4. **Slicer** selon le cas :
    - **Projet Bambu avec réglages** (3MF qui a `has_project_settings` à true) : `check_settings`, puis
      `optimize` avec l'objectif retenu (`compare_all` à true). Il slice l'original et les 5 recettes
-     en parallèle et donne la variante conseillée.
+     en parallèle et donne la variante conseillée. Un projet fait pour une autre imprimante (X1C, A1…)
+     est converti en P1S automatiquement : signale-le dans le résumé.
+   - **Projet à plusieurs plateaux** : un seul appel avec `plate` à 0 (la valeur par défaut), jamais un
+     appel par plateau. Chaque variante donne un seul `result.3mf` avec tous les plateaux, et
+     `plates` donne le détail par plateau.
+   - L'encombrement total d'`analyze_model` sur un projet à plusieurs plateaux est celui de la scène
+     entière : ne conclus pas « ne tient pas » tant que le slice réussit.
    - **STL ou 3MF géométrie seule** : `prepare_print` (matériau, objectif, copies). Puis `optimize`
      sur le `project_3mf` produit pour montrer les autres objectifs.
    - Si la pièce ne tient pas sur la P1S, ne slice pas : explique et propose de réduire l'échelle,
@@ -74,6 +80,8 @@ Orientation : <retenue et pourquoi> · Supports : <non / oui, pourquoi> · Bordu
 | Variante | Temps | Poids | Écart |
 |---|---|---|---|
 | ... (original ou préparation, puis les recettes) |
+
+<plusieurs plateaux : une ligne de détail par plateau pour la variante conseillée>
 
 ## ✅ Recommandation
 <variante conseillée, en une ou deux phrases : pourquoi elle, pour cet usage>

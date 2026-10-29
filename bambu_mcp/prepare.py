@@ -3,10 +3,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from . import geometry, materials, presets, slicer
-
-MACHINE = "Bambu Lab P1S 0.4 nozzle"
-BASE_PROCESS = "0.20mm Standard @BBL X1C"
+from . import config, geometry, materials, presets, slicer
 
 
 def prepare(models: list[str], material: str = "PLA", goal: str = "equilibre", copies: int = 1,
@@ -69,15 +66,16 @@ def prepare(models: list[str], material: str = "PLA", goal: str = "equilibre", c
 
         plate = bed_type or next((p for p in mat["plate"] if (guide["bed_c"].get(p) or "0") != "0"), None)
         decisions.append(f"Plateau : {plate} ({guide['bed_c'].get(plate)} °C).")
-        proc, fil = slicer._split(settings, MACHINE, BASE_PROCESS, [filament])
-        result = slicer.run(inputs, MACHINE, BASE_PROCESS, [filament], proc, fil or None, 0, plate,
+        machine, process = config.default_machine(), config.default_process()
+        proc, fil = slicer._split(settings, machine, process, [filament])
+        result = slicer.run(inputs, machine, process, [filament], proc, fil or None, 0, plate,
                             orient=orient_3mf, arrange=len(inputs) > 1 or any(i.lower().endswith(".stl") for i in inputs),
                             label=f"{mat_name}_{goal}")
     finally:
         shutil.rmtree(work, ignore_errors=True)
 
     warnings = []
-    nozzle = presets.resolve("machine", MACHINE).get("nozzle_type")
+    nozzle = presets.resolve("machine", config.default_machine()).get("nozzle_type")
     nozzle = nozzle[0] if isinstance(nozzle, list) else nozzle
     if mat.get("abrasive") and nozzle != "hardened_steel":
         warnings.append(f"{mat_name} est abrasif et le preset machine indique une buse {nozzle} : "

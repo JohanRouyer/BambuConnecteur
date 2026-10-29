@@ -165,9 +165,33 @@ def _set_object_settings(raw: bytes, object_settings: dict, ps: dict) -> tuple[b
     return b'<?xml version="1.0" encoding="UTF-8"?>\n' + ET.tostring(root, encoding="utf-8"), changes
 
 
+def is_project(path: str) -> bool:
+    """Vrai pour un 3MF qui porte ses propres réglages Bambu (project_settings.config)."""
+    if Path(path).suffix.lower() != ".3mf":
+        return False
+    with zipfile.ZipFile(path) as z:
+        return PROJECT in z.namelist()
+
+
+def _set_machine(ps: dict, machine: str) -> dict | None:
+    """Remplace la partie imprimante du projet par le preset `machine`, process et filaments gardés.
+    Rien à faire si le projet vise déjà ce modèle (preset utilisateur dérivé compris)."""
+    cfg = presets.resolve("machine", machine)
+    if ps.get("printer_model") == cfg.get("printer_model"):
+        return None
+    before = ps.get("printer_settings_id")
+    ps.update(cfg)
+    ps["printer_settings_id"] = machine
+    diffs = ps.get("different_settings_to_system")
+    if isinstance(diffs, list) and diffs:
+        diffs[-1] = ""  # Dernier emplacement : écarts au preset machine, qui n'existent plus.
+    return {"key": "printer_settings_id", "before": before, "after": machine}
+
+
 def edit(path: str, settings: dict | None = None, object_settings: dict | None = None,
-         output_path: str | None = None) -> dict:
-    """Écrit une copie modifiée du 3MF. L'original n'est remplacé que si output_path == path."""
+         output_path: str | None = None, machine: str | None = None) -> dict:
+    """Écrit une copie modifiée du 3MF. L'original n'est remplacé que si output_path == path.
+    `machine` : convertit le projet vers ce preset imprimante avant d'appliquer `settings`."""
     src = Path(path)
     out = Path(output_path) if output_path else src.with_name(f"{src.stem}_claude{src.suffix}")
     with zipfile.ZipFile(src) as z:
@@ -176,8 +200,12 @@ def edit(path: str, settings: dict | None = None, object_settings: dict | None =
             raise ValueError("Pas de réglages Bambu dans ce 3MF : utiliser export_bambu_project d'abord.")
         ps = json.loads(z.read(PROJECT))
         changes: list = []
+        converted = _set_machine(ps, machine) if machine else None
+        if converted:
+            changes.append(converted)
         if settings:
-            normalized, changes = presets.apply_settings(ps, settings)
+            normalized, setting_changes = presets.apply_settings(ps, settings)
+            changes += setting_changes
             ps.update(normalized)
             _mark_modified(ps, list(normalized))
         replaced = {PROJECT: json.dumps(ps, indent=4, ensure_ascii=False).encode("utf-8")}

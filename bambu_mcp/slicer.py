@@ -10,7 +10,7 @@ import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from . import analysis, config, history, presets, threemf
+from . import analysis, config, history, materials, presets, threemf
 
 
 def _flatten(kind: str, name: str, overrides: dict | None, dest: Path) -> list:
@@ -26,12 +26,22 @@ def _flatten(kind: str, name: str, overrides: dict | None, dest: Path) -> list:
     return changes
 
 
+def _default_presets(models: list[str], machine: str | None, process: str | None,
+                     filaments: list[str] | None) -> tuple:
+    """STL ou 3MF géométrie seule sans presets : P1S, process standard et PLA par défaut."""
+    if machine or all(threemf.is_project(m) for m in models):
+        return machine, process, filaments
+    return config.default_machine(), config.default_process(), [materials.MATERIALS["PLA"]["filament"]]
+
+
 def run(models: list[str], machine: str | None = None, process: str | None = None,
         filaments: list[str] | None = None, process_overrides: dict | None = None,
         filament_overrides: dict | None = None, plate: int = 0,
         bed_type: str | None = None, orient: bool = False, arrange: bool = False,
         label: str | None = None, timeout_s: int = 300) -> dict:
-    """Lance bambu-studio.exe. Sans presets, un 3MF Bambu garde ses propres réglages.
+    """Lance bambu-studio.exe. Sans presets, un 3MF Bambu garde ses propres réglages, mais passe sur
+    l'imprimante par défaut (P1S) s'il visait un autre modèle ; un STL reçoit les presets par défaut.
+    `plate` 0 : tous les plateaux, dans un seul result.3mf.
     Un slice identique déjà fait est renvoyé depuis le cache (`cached`: true)."""
     exe = config.executable()
     if not exe.exists():
@@ -46,10 +56,11 @@ def run(models: list[str], machine: str | None = None, process: str | None = Non
         raise ValueError("`process_overrides` avec `machine` demande aussi `process`.")
     if machine and filament_overrides and not filaments:
         raise ValueError("`filament_overrides` avec `machine` demande aussi `filaments`.")
-    # Sans presets, les overrides s'appliquent aux réglages propres du projet 3MF.
+    machine, process, filaments = _default_presets(models, machine, process, filaments)
+    # Sans presets, les overrides s'appliquent aux réglages propres du projet 3MF,
+    # converti au passage vers l'imprimante par défaut.
     project_overrides = {} if machine else {**(filament_overrides or {}), **(process_overrides or {})}
-    if project_overrides and any(m.suffix.lower() != ".3mf" for m in model_paths):
-        raise ValueError("Sans `machine`, les overrides ne s'appliquent qu'à un projet 3MF Bambu.")
+    convert_to = None if machine else config.default_machine()
 
     # Dossier court : la CLI échoue quand le chemin de travail est trop long.
     work = Path(tempfile.mkdtemp(prefix="bmcp_"))
@@ -83,19 +94,21 @@ def run(models: list[str], machine: str | None = None, process: str | None = Non
     for m in model_paths:
         local = work / "in" / m.name
         shutil.copy2(m, local)
-        if project_overrides:
-            edited = threemf.edit(str(local), project_overrides, output_path=str(local.with_suffix(".edit")))
+        if convert_to:
+            edited = threemf.edit(str(local), project_overrides, output_path=str(local.with_suffix(".edit")),
+                                  machine=convert_to)
             Path(edited["output"]).replace(local)
-            applied[m.name] = edited["changes"]
+            if edited["changes"]:
+                applied[m.name] = edited["changes"]
         local_models.append(f"in/{m.name}")
     args += ["--export-3mf", "result.3mf", "--outputdir", "out"] + local_models
 
-    key = _cache_key(exe, args, project_overrides, model_paths, work)
+    key = _cache_key(exe, args, [project_overrides, convert_to], model_paths, work)
     overrides = {**(filament_overrides or {}), **(process_overrides or {})}
     cached = _cache_get(key)
     if cached:
         shutil.rmtree(work, ignore_errors=True)
-        history.record(model_paths, cached, machine, process, filaments, overrides, label)
+        history.record(model_paths, cached, machine or convert_to, process, filaments, overrides, label)
         return cached
 
     started = time.time()
@@ -122,8 +135,10 @@ def run(models: list[str], machine: str | None = None, process: str | None = Non
                        time.strftime("%Y%m%d-%H%M%S") + (f"_plateau-{plate}" if plate else ""))
     produced = []
     if out_dir.is_dir():
+        # Le result.3mf contient déjà le G-code de chaque plateau : pas de plate_N.gcode en double à côté.
+        bundled = (out_dir / "result.3mf").exists()
         for f in out_dir.iterdir():
-            if f.is_file():
+            if f.is_file() and not (bundled and f.suffix == ".gcode"):
                 shutil.move(str(f), dest / f.name)
                 produced.append(str(dest / f.name))
     shutil.rmtree(work, ignore_errors=True)
@@ -152,7 +167,7 @@ def run(models: list[str], machine: str | None = None, process: str | None = Non
         summary["stderr"] = (proc.stderr or proc.stdout or "")[-3000:]
     else:
         _cache_put(key, summary)
-    history.record(model_paths, summary, machine, process, filaments, overrides, label)
+    history.record(model_paths, summary, machine or convert_to, process, filaments, overrides, label)
     return summary
 
 
@@ -189,11 +204,11 @@ def _unique_dir(project: str, variant: str, name: str) -> Path:
     raise OSError(f"Impossible de créer un dossier de sortie pour {name}")
 
 
-def _cache_key(exe: Path, args: list, project_overrides: dict, model_paths: list[Path], work: Path) -> str:
+def _cache_key(exe: Path, args: list, project_edits: list, model_paths: list[Path], work: Path) -> str:
     """Empreinte de tout ce qui change le résultat : modèles, presets aplatis, overrides, options, version."""
     h = hashlib.sha256()
     h.update(f"{exe}|{exe.stat().st_mtime_ns}".encode())
-    h.update(json.dumps([args[1:], project_overrides], sort_keys=True).encode())
+    h.update(json.dumps([args[1:], project_edits], sort_keys=True).encode())
     for path in model_paths + sorted(work.glob("*.json")):
         h.update(path.read_bytes())
     return h.hexdigest()[:32]
@@ -260,6 +275,8 @@ def _row(name: str, settings: dict, result: dict) -> dict:
             "weight_g": round(sum(p["filament_g"] for p in plates), 2),
             "slicer_warnings": [p["warning"] for p in plates if p.get("warning")],
             "checks": result.get("checks", []), "settings": settings,
+            "plates": [{"plate": p["plate"], "time": p["time"], "time_s": p["time_s"], "weight_g": p["filament_g"]}
+                       for p in plates],
             "project_3mf": result.get("project_3mf"), "cached": result.get("cached", False),
             **({"error": result.get("message") or "échec du slicing"} if result.get("return_code") else {})}
 
@@ -272,6 +289,7 @@ def compare(models: list[str], variants: dict[str, dict], include_original: bool
     if not jobs:
         raise ValueError("Aucune variante à slicer.")
     workers = max_workers or min(len(jobs), max(1, (os.cpu_count() or 4) // 3))
+    machine, process, filaments = _default_presets(models, machine, process, filaments)
 
     def one(job):
         name, settings = job

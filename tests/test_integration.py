@@ -77,10 +77,24 @@ def test_argument_errors(tmp_path, kwargs, message):
         slicer.run([str(stl)], **kwargs)
 
 
-def test_overrides_on_stl_need_presets(tmp_path):
+def test_stl_without_presets_gets_p1s_defaults(tmp_path):
     stl = write_stl(box(10, 10, 10), tmp_path / "c.stl")
-    with pytest.raises(ValueError, match="3MF"):
-        slicer.run([str(stl)], process_overrides={"layer_height": "0.2"})
+    r = slicer.run([str(stl)], process_overrides={"layer_height": "0.28"}, arrange=True)
+    assert r["return_code"] == 0, r.get("stderr")
+    s = threemf.get_settings(r["project_3mf"], "printer_settings_id layer_height")
+    assert s["printer_settings_id"] == MACHINE and s["layer_height"] == "0.28"
+
+
+def test_other_printer_project_is_converted_to_p1s(tmp_path):
+    stl = write_stl(box(20, 20, 20), tmp_path / "c.stl")
+    x1c = slicer.run([str(stl)], "Bambu Lab X1 Carbon 0.4 nozzle", PROCESS, ["Bambu PLA Basic @BBL X1C"],
+                     {"wall_loops": "4"}, arrange=True)
+    r = slicer.run([x1c["project_3mf"]])
+    assert r["return_code"] == 0, r.get("stderr")
+    s = threemf.get_settings(r["project_3mf"], "printer_settings_id printer_model wall_loops")
+    assert s["printer_settings_id"] == MACHINE and s["printer_model"] == "Bambu Lab P1S"
+    assert s["wall_loops"] == "4"  # Réglages d'impression du projet gardés.
+    assert not any(f.endswith(".gcode") for f in r["files"])  # G-code seulement dans le result.3mf.
 
 
 def test_prepare_flips_funnel_and_skips_supports(tmp_path):

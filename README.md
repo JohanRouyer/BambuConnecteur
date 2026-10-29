@@ -25,8 +25,13 @@ projets 3MF, slicer pour comparer des réglages et lire l'état de ta P1S en ré
 | `printer_status` | État de la P1S (températures, progression, AMS, erreurs HMS), en lecture seule |
 | `connector_info` | Chemins utilisés et état de la config |
 
+Tous les slices visent la P1S : un projet 3MF fait pour une autre imprimante (X1C, A1…) y est converti
+(réglages d'impression et de filament gardés), et un STL sans presets reçoit P1S / 0.20mm Standard / PLA.
+Pour viser une autre imprimante, ajouter `"default_machine"` (et au besoin `"default_process"`) dans `config.json`.
+
 Les résultats de slicing vont dans `output/<projet>/<variante>/<horodatage>[_plateau-N]/` (variante :
-`original`, `qualite`, `vitesse`... ou `slice` pour un slice simple). Un slice identique (mêmes modèles, réglages, presets et
+`original`, `qualite`, `vitesse`... ou `slice` pour un slice simple). Avec `plate` 0 (par défaut), un seul
+`result.3mf` contient tous les plateaux et leur G-code. Un slice identique (mêmes modèles, réglages, presets et
 version de Bambu Studio) est renvoyé depuis le cache `output/.cache/` ; supprimer ce dossier le vide.
 Chaque slice est noté dans `output/history.jsonl`. Si Bambu Studio se fige (rare), le slice est
 relancé une fois après 5 min, puis abandonné avec un message clair.
