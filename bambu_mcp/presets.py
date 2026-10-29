@@ -1,4 +1,4 @@
-"""Presets Bambu Studio : index des profils système et utilisateur, héritage, écriture."""
+"""Bambu Studio presets: index of system and user profiles, inheritance, writing."""
 import difflib
 import json
 import re
@@ -9,17 +9,17 @@ from pathlib import Path
 
 from . import config
 
-# Type de preset -> clé qui porte son nom dans la config résolue.
+# Preset type -> key holding its name in the resolved config.
 TYPES = {"process": "print_settings_id", "filament": "filament_settings_id", "machine": "printer_settings_id"}
 
-# Clés de structure du fichier, pas des réglages d'impression.
+# File structure keys, not print settings.
 META_KEYS = {"inherits", "instantiation", "from", "setting_id", "base_id", "include", "type",
              "description", "renamed_from", "is_custom_defined", "version", "name"}
 
 
 def _check_type(kind: str) -> None:
     if kind not in TYPES:
-        raise ValueError(f"Type inconnu {kind!r} : utiliser process, filament ou machine.")
+        raise ValueError(f"Unknown type {kind!r}: use process, filament or machine.")
 
 
 def _read_json(path: Path) -> dict:
@@ -44,7 +44,7 @@ _user_cache: dict = {"at": 0.0, "index": None}
 
 
 def _user_index() -> dict:
-    # Relu au plus toutes les 3 s : les presets peuvent changer depuis Bambu Studio.
+    # Reread at most every 3 s: presets may change from Bambu Studio.
     if _user_cache["index"] is not None and time.monotonic() - _user_cache["at"] < 3:
         return _user_cache["index"]
     _user_cache["index"], _user_cache["at"] = _load_user_index(), time.monotonic()
@@ -70,7 +70,7 @@ def _load_user_index() -> dict:
 
 
 def find(kind: str, name: str) -> tuple[str, Path, dict]:
-    """Renvoie (source, chemin, contenu brut) ; les presets utilisateur priment."""
+    """Return (source, path, raw content); user presets win."""
     _check_type(kind)
     users, systems = _user_index()[kind], _system_index()[kind]
     if name in users:
@@ -81,14 +81,14 @@ def find(kind: str, name: str) -> tuple[str, Path, dict]:
     if name.lower() in lowered:
         return find(kind, lowered[name.lower()])
     close = difflib.get_close_matches(name, list(users) + list(systems), n=5, cutoff=0.5)
-    hint = f" Noms proches : {close}" if close else ""
-    raise KeyError(f"Preset {kind} introuvable : {name!r}.{hint}")
+    hint = f" Close names: {close}" if close else ""
+    raise KeyError(f"{kind.capitalize()} preset not found: {name!r}.{hint}")
 
 
 def resolve(kind: str, name: str, _depth: int = 0) -> dict:
-    """Config complète d'un preset, héritage et includes appliqués."""
+    """Complete config of a preset, with inheritance and includes applied."""
     if _depth > 20:
-        raise RecursionError(f"Héritage trop profond pour {name!r}")
+        raise RecursionError(f"Inheritance too deep for {name!r}")
     source, _, data = find(kind, name)
     if source == "system":
         return dict(_resolve_system(kind, name))
@@ -114,13 +114,13 @@ def _resolve_system(kind: str, name: str) -> dict:
 
 
 def overrides(kind: str, name: str) -> dict:
-    """Réglages définis dans le preset lui-même (sans ceux hérités)."""
+    """Settings defined in the preset itself (inherited ones excluded)."""
     _, _, data = find(kind, name)
     return {k: v for k, v in data.items() if k not in META_KEYS}
 
 
 def system_parent(kind: str, name: str) -> str | None:
-    """Premier ancêtre système d'un preset (lui-même s'il est système)."""
+    """First system ancestor of a preset (itself if it is a system preset)."""
     source, _, data = find(kind, name)
     if source == "system":
         return name
@@ -135,6 +135,34 @@ def is_compatible(kind: str, name: str, printer: str) -> bool:
     return not compat or printer in compat
 
 
+def canonical(kind: str, name: str) -> str:
+    """Exact name of a preset (lookup tolerates case differences)."""
+    _, _, data = find(kind, name)
+    return data.get("name") or name
+
+
+def standard_process(machine: str) -> str:
+    """The printer's "0.20mm Standard" process (fallback: its first system process)."""
+    names = [r["name"] for r in list_presets("process", "system", machine)]
+    if not names:
+        raise KeyError(f"No system process compatible with {machine!r}.")
+    return next((n for n in names if n.startswith("0.20mm Standard")), names[0])
+
+
+def for_machine(kind: str, name: str, machine: str) -> str:
+    """Variant of a system preset for `machine`: "Bambu PLA Basic @BBL P1S 0.4 nozzle" becomes
+    "Bambu PLA Basic @BBL A1" on an A1. A preset that is already compatible is returned as is."""
+    name = canonical(kind, name)
+    if is_compatible(kind, name, machine):
+        return name
+    base = name.split(" @")[0]
+    match = next((r["name"] for r in list_presets(kind, "system", machine, base)
+                  if r["name"].split(" @")[0] == base), None)
+    if not match:
+        raise KeyError(f"No version of {name!r} for {machine!r}.")
+    return match
+
+
 def list_presets(kind: str, source: str = "all", printer: str | None = None,
                  search: str | None = None) -> list[dict]:
     _check_type(kind)
@@ -146,7 +174,7 @@ def list_presets(kind: str, source: str = "all", printer: str | None = None,
     if source in ("all", "system"):
         for name, (path, data) in _system_index()[kind].items():
             if str(data.get("instantiation", "")).lower() != "true":
-                continue  # Profils de base internes, jamais proposés dans l'interface.
+                continue  # Internal base profiles, never offered in the UI.
             rows.append({"name": name, "source": "system", "inherits": data.get("inherits", "")})
     if search:
         words = search.lower().split()
@@ -172,13 +200,13 @@ def _to_str(value) -> str:
 
 
 def normalize(current, value):
-    """Met une valeur au format Bambu : chaîne, ou liste de chaînes de même longueur que l'existante."""
+    """Put a value in Bambu format: string, or list of strings as long as the existing one."""
     if isinstance(current, list):
         if isinstance(value, list):
             return [_to_str(v) for v in value]
         return [_to_str(value)] * max(1, len(current))
     if isinstance(value, list):
-        raise ValueError(f"liste reçue pour un réglage simple (valeur actuelle {current!r})")
+        raise ValueError(f"list given for a single-value setting (current value {current!r})")
     return _to_str(value)
 
 
@@ -189,9 +217,9 @@ def _profile_keys(kind: str) -> frozenset:
 
 @lru_cache(maxsize=None)
 def known_keys(kind: str) -> frozenset:
-    """Réglages valides pour un type. Un preset n'écrit pas les réglages restés à leur valeur
-    par défaut (brim_type…) : ceux-là viennent de settings_keys.json, la liste complète d'un projet
-    exporté par Bambu Studio, rangés côté filament s'ils commencent par filament_, sinon côté process."""
+    """Valid settings for a type. A preset does not write settings left at their default value
+    (brim_type…): those come from settings_keys.json, the complete list of a project exported by
+    Bambu Studio, filed on the filament side if they start with filament_, otherwise on the process side."""
     _check_type(kind)
     own = _profile_keys(kind)
     if kind == "machine":
@@ -205,12 +233,12 @@ def known_keys(kind: str) -> frozenset:
 
 def apply_settings(base: dict, settings: dict, allow_new_keys: bool = False,
                    known: frozenset | None = None) -> tuple[dict, list]:
-    """Normalise `settings` par rapport à `base`. Renvoie (réglages normalisés, changements).
-    `known` : clés acceptées même absentes de `base`."""
+    """Normalize `settings` against `base`. Return (normalized settings, changes).
+    `known`: keys accepted even when missing from `base`."""
     unknown = [k for k in settings if k not in base and not allow_new_keys and k not in (known or ())]
     if unknown:
         suggestions = {k: difflib.get_close_matches(k, list(base), n=3, cutoff=0.6) for k in unknown}
-        raise KeyError(f"Réglages inconnus : {suggestions}")
+        raise KeyError(f"Unknown settings: {suggestions}")
     normalized, changes = {}, []
     for key, value in settings.items():
         new = normalize(base.get(key, ""), value)
@@ -246,11 +274,11 @@ def _write_info(info_path: Path, base_id: str) -> None:
 
 
 def save_user_preset(kind: str, name: str, settings: dict, parent: str | None = None) -> dict:
-    """Crée ou met à jour un preset utilisateur. Sauvegarde l'ancien fichier avant d'écrire."""
+    """Create or update a user preset. Backs up the old file before writing."""
     _check_type(kind)
     udir = config.user_presets_dir()
     if not udir:
-        raise FileNotFoundError("Dossier utilisateur Bambu Studio introuvable.")
+        raise FileNotFoundError("Bambu Studio user folder not found.")
     users = _user_index()[kind]
     backup = None
     if name in users:
@@ -260,10 +288,10 @@ def save_user_preset(kind: str, name: str, settings: dict, parent: str | None = 
         created = False
     else:
         if not parent:
-            raise ValueError("Nouveau preset : indiquer `parent` (preset système ou utilisateur).")
+            raise ValueError("New preset: give `parent` (system or user preset).")
         psource, _, pdata = find(kind, parent)
         if psource == "user":
-            # Bambu Studio n'accepte qu'un parent système : on recopie les surcharges du parent utilisateur.
+            # Bambu Studio only accepts a system parent: the user parent's overrides are copied over.
             own = {k: v for k, v in pdata.items() if k not in META_KEYS}
             own["inherits"] = pdata.get("inherits", "")
             own["version"] = pdata.get("version", "")

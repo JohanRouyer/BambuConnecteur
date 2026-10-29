@@ -1,4 +1,4 @@
-"""Chemins Bambu Studio et configuration locale du connecteur (config.json)."""
+"""Bambu Studio paths and the connector's local configuration (config.json)."""
 import json
 import os
 import subprocess
@@ -7,11 +7,37 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parent.parent
 CONFIG_FILE = ROOT / "config.json"
 
+# Fallback target printer and a compatible starting process (P1S presets reuse the X1C processes).
+DEFAULT_MACHINE = "Bambu Lab P1S 0.4 nozzle"
+DEFAULT_PROCESS = "0.20mm Standard @BBL X1C"
+
 
 def load() -> dict:
     if CONFIG_FILE.exists():
         return json.loads(CONFIG_FILE.read_text(encoding="utf-8-sig"))
     return {}
+
+
+def save(updates: dict) -> None:
+    """Merge `updates` into config.json (other keys, `printer` included, are kept)."""
+    CONFIG_FILE.write_text(json.dumps({**load(), **updates}, indent=4, ensure_ascii=False) + "\n", encoding="utf-8")
+
+
+def setup_needed() -> bool:
+    """First use: the default printer has not been chosen yet."""
+    return not load().get("default_machine")
+
+
+def default_machine() -> str:
+    return load().get("default_machine") or DEFAULT_MACHINE
+
+
+def default_process() -> str:
+    return load().get("default_process") or DEFAULT_PROCESS
+
+
+def default_filament() -> str | None:
+    return load().get("default_filament")
 
 
 def install_dir() -> Path:
@@ -43,7 +69,7 @@ def user_id() -> str | None:
     user_root = data_dir() / "user"
     if not user_root.is_dir():
         return None
-    # Le dossier numérique est le compte Bambu connecté ; "default" sert hors connexion.
+    # The numeric folder is the signed-in Bambu account; "default" is used offline.
     numeric = sorted(p.name for p in user_root.iterdir() if p.is_dir() and p.name.isdigit())
     if numeric:
         return numeric[0]

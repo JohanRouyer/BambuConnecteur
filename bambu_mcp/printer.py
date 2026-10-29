@@ -1,4 +1,4 @@
-"""État de l'imprimante en réseau local (MQTT, lecture seule)."""
+"""Printer status over the local network (MQTT, read-only)."""
 import json
 import os
 import ssl
@@ -7,10 +7,6 @@ import threading
 import paho.mqtt.client as mqtt
 
 from . import config
-
-GCODE_STATES = {"IDLE": "au repos", "PREPARE": "préparation", "RUNNING": "impression en cours",
-                "PAUSE": "en pause", "FINISH": "terminée", "FAILED": "échouée", "SLICING": "slicing"}
-
 
 def _ams_trays(ams: dict) -> list[dict]:
     trays = []
@@ -31,14 +27,14 @@ def status(timeout_s: float = 10, include_raw: bool = False) -> dict:
     host, serial, code = cfg.get("host"), cfg.get("serial"), cfg.get("access_code")
     missing = [k for k, v in {"host": host, "serial": serial, "access_code": code}.items() if not v]
     if missing:
-        raise ValueError(f"Compléter la section \"printer\" de {config.CONFIG_FILE} : {missing}")
+        raise ValueError(f"Fill in the \"printer\" section of {config.CONFIG_FILE}: {missing}")
 
     report: dict = {}
     error: dict = {}
     done = threading.Event()
     client = mqtt.Client(mqtt.CallbackAPIVersion.VERSION2, client_id=f"claude-bambu-{os.getpid()}")
     client.username_pw_set("bblp", code)
-    # L'imprimante utilise un certificat auto-signé.
+    # The printer uses a self-signed certificate.
     ctx = ssl.create_default_context()
     ctx.check_hostname = False
     ctx.verify_mode = ssl.CERT_NONE
@@ -46,7 +42,7 @@ def status(timeout_s: float = 10, include_raw: bool = False) -> dict:
 
     def on_connect(cl, userdata, flags, reason, props):
         if reason.is_failure:
-            error["message"] = f"Connexion refusée ({reason}) : vérifier le code d'accès et le mode LAN."
+            error["message"] = f"Connection refused ({reason}): check the access code and LAN mode."
             done.set()
             return
         cl.subscribe(f"device/{serial}/report")
@@ -67,7 +63,7 @@ def status(timeout_s: float = 10, include_raw: bool = False) -> dict:
     try:
         client.connect(host, 8883, keepalive=30)
     except OSError as exc:
-        raise ConnectionError(f"Imprimante injoignable sur {host}:8883 ({exc}).") from exc
+        raise ConnectionError(f"Printer unreachable at {host}:8883 ({exc}).") from exc
     client.loop_start()
     done.wait(timeout_s)
     client.loop_stop()
@@ -75,12 +71,12 @@ def status(timeout_s: float = 10, include_raw: bool = False) -> dict:
     if error:
         raise ConnectionError(error["message"])
     if not report:
-        raise TimeoutError("Aucun état reçu. L'imprimante est-elle allumée et sur le même réseau ?")
+        raise TimeoutError("No status received. Is the printer on and on the same network?")
 
     p = report
     state = p.get("gcode_state")
     result = {
-        "state": state, "state_fr": GCODE_STATES.get(state, state),
+        "state": state,
         "job": p.get("subtask_name") or None, "progress_pct": p.get("mc_percent"),
         "remaining_min": p.get("mc_remaining_time"),
         "layer": f"{p.get('layer_num')}/{p.get('total_layer_num')}" if p.get("total_layer_num") else None,

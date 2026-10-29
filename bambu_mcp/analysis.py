@@ -1,7 +1,7 @@
-"""Contrôles d'un jeu de réglages Bambu : débit volumétrique, vitesses machine, pièges courants."""
+"""Checks on a set of Bambu settings: volumetric flow, machine speeds, common pitfalls."""
 from . import threemf
 
-# Type de ligne -> (clé de vitesse, clé de largeur, clé de hauteur de couche).
+# Line type -> (speed key, line width key, layer height key).
 FEATURES = {
     "outer_wall": ("outer_wall_speed", "outer_wall_line_width", "layer_height"),
     "inner_wall": ("inner_wall_speed", "inner_wall_line_width", "layer_height"),
@@ -16,7 +16,7 @@ FEATURES = {
 
 
 def _num(value, default: float = 0.0) -> float:
-    """Premier nombre d'une valeur Bambu (chaîne ou liste de variantes)."""
+    """First number of a Bambu value (string or list of variants)."""
     if isinstance(value, list):
         value = value[0] if value else ""
     try:
@@ -34,13 +34,13 @@ def _line_width(ps: dict, key: str) -> float:
     width = _num(raw)
     if not width and key != "line_width":
         return _line_width(ps, "line_width")
-    # 0 = largeur automatique de Bambu Studio.
+    # 0 = Bambu Studio's automatic width.
     return width or nozzle * 1.125
 
 
 def flow_check(ps: dict) -> list[dict]:
-    """Débit demandé par type de ligne, comparé au débit max du filament.
-    Bambu Studio plafonne la vitesse au débit max : au-delà, la vitesse réglée n'est pas atteinte."""
+    """Requested flow per line type, compared with the filament's max volumetric speed.
+    Bambu Studio caps speed at that flow: above it, the set speed is never reached."""
     max_flow = _num(ps.get("filament_max_volumetric_speed"))
     rows = []
     for feature, (speed_key, width_key, height_key) in FEATURES.items():
@@ -59,35 +59,38 @@ def flow_check(ps: dict) -> list[dict]:
 
 
 def warnings(ps: dict) -> list[str]:
-    """Pièges courants sur P1S, en clair."""
+    """Common pitfalls, in plain words."""
     out = []
     max_flow = _num(ps.get("filament_max_volumetric_speed"))
     capped = [r for r in flow_check(ps) if "capped_speed" in r]
     if capped:
         details = ", ".join(f"{r['feature']} {r['speed']:g}→{r['capped_speed']} mm/s" for r in capped)
-        out.append(f"Débit max du filament ({max_flow:g} mm³/s) atteint : vitesses réelles plafonnées ({details}).")
+        out.append(f"Filament max flow ({max_flow:g} mm³/s) reached: actual speeds are capped ({details}).")
     machine_max = _num(ps.get("machine_max_speed_x"))
     too_fast = [k for k, _, _ in FEATURES.values() if machine_max and _num(ps.get(k)) > machine_max]
     if too_fast:
-        out.append(f"Vitesses au-dessus du maximum machine ({machine_max:g} mm/s) : {too_fast}.")
+        out.append(f"Speeds above the machine maximum ({machine_max:g} mm/s): {too_fast}.")
     if _num(ps.get("slow_down_for_layer_cooling"), 1) and _num(ps.get("slow_down_layer_time"), 1) == 0:
-        out.append("slow_down_layer_time = 0 : pas de ralentissement sur les petites couches "
-                   "(cheminées, pointes, détails fins risquent de fondre).")
+        out.append("slow_down_layer_time = 0: no slowdown on small layers "
+                   "(chimneys, tips and fine details may melt).")
     if not _num(ps.get("slow_down_for_layer_cooling"), 1):
-        out.append("Ralentissement pour refroidissement désactivé (slow_down_for_layer_cooling = 0).")
+        out.append("Slowdown for layer cooling disabled (slow_down_for_layer_cooling = 0).")
     nozzle = _num(ps.get("nozzle_diameter"), 0.4)
     layer = _num(ps.get("layer_height"))
     if layer > nozzle * 0.75:
-        out.append(f"Couche de {layer:g} mm trop épaisse pour une buse de {nozzle:g} mm (max conseillé {nozzle * 0.75:g}).")
+        out.append(f"{layer:g} mm layers are too thick for a {nozzle:g} mm nozzle (recommended max {nozzle * 0.75:g}).")
     if _num(ps.get("wall_loops"), 2) < 2:
-        out.append("Une seule paroi : pièce fragile et surfaces irrégulières.")
+        out.append("A single wall: fragile part and uneven surfaces.")
+    if ps.get("sparse_infill_pattern") == "lightning":
+        out.append("Lightning infill: top layers bridge over large gaps (sagging or holed top surfaces); "
+                   "adaptivecubic keeps the weight saving without this flaw.")
     ftype = ps.get("filament_type")
     ftype = (ftype[0] if isinstance(ftype, list) and ftype else ftype) or ""
     if ftype.upper() in ("ABS", "ASA", "PC", "PA") and _num(ps.get("fan_max_speed"), 0) > 60:
-        out.append(f"{ftype} avec ventilateur jusqu'à {_num(ps.get('fan_max_speed')):g} % : risque de délaminage "
-                   "(fermer le capot de la P1S, ventilation réduite).")
+        out.append(f"{ftype} with the fan up to {_num(ps.get('fan_max_speed')):g} %: risk of delamination "
+                   "(close the enclosure, reduce cooling).")
     if ftype.upper() == "TPU":
-        out.append("TPU : à charger par la bobine externe, pas par l'AMS.")
+        out.append("TPU: feed it from the external spool, not the AMS.")
     return out
 
 

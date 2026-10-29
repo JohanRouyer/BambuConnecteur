@@ -1,4 +1,4 @@
-"""Slicing et export de projets via la ligne de commande de Bambu Studio."""
+"""Slicing and project export through the Bambu Studio command line."""
 import hashlib
 import json
 import os
@@ -10,11 +10,11 @@ import zipfile
 from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
 
-from . import analysis, config, history, presets, threemf
+from . import analysis, config, history, materials, presets, threemf
 
 
 def _flatten(kind: str, name: str, overrides: dict | None, dest: Path) -> list:
-    """Écrit le preset entièrement résolu : la CLI ne connaît pas les presets utilisateur."""
+    """Write the fully resolved preset: the CLI does not know about user presets."""
     cfg = presets.resolve(kind, name)
     changes = []
     if overrides:
@@ -26,32 +26,67 @@ def _flatten(kind: str, name: str, overrides: dict | None, dest: Path) -> list:
     return changes
 
 
+def _default_presets(models: list[str], machine: str | None, process: str | None,
+                     filaments: list[str] | None) -> tuple:
+    """STL or geometry-only 3MF without presets: default printer, process and filament (else PLA)."""
+    if machine or all(threemf.is_project(m) for m in models):
+        return machine, process, filaments
+    machine = config.default_machine()
+    return machine, config.default_process(), filaments or [
+        config.default_filament() or presets.for_machine("filament", materials.MATERIALS["PLA"]["filament"], machine)]
+
+
+def fit_machine(settings: dict, machine: str) -> dict:
+    """Bring a recipe's accelerations down to 75 % of the printer's maximum (A1: 12,000)."""
+    limit = presets.resolve("machine", machine).get("machine_max_acceleration_extruding") or ["20000"]
+    cap = int(float(limit[0] if isinstance(limit, list) else limit) * 0.75)
+    return {k: (str(min(int(v), cap)) if k.endswith("_acceleration") and v.isdigit() else v)
+            for k, v in settings.items()}
+
+
+def _filament_slots(models: list[Path]) -> int:
+    """Number of filaments declared by the 3MF projects (at least 1)."""
+    slots = 1
+    for m in models:
+        if threemf.is_project(str(m)):
+            ids = threemf.get_settings(str(m), "filament_settings_id").get("filament_settings_id")
+            slots = max(slots, len(ids) if isinstance(ids, list) else 1)
+    return slots
+
+
 def run(models: list[str], machine: str | None = None, process: str | None = None,
         filaments: list[str] | None = None, process_overrides: dict | None = None,
         filament_overrides: dict | None = None, plate: int = 0,
         bed_type: str | None = None, orient: bool = False, arrange: bool = False,
         label: str | None = None, timeout_s: int = 300) -> dict:
-    """Lance bambu-studio.exe. Sans presets, un 3MF Bambu garde ses propres réglages.
-    Un slice identique déjà fait est renvoyé depuis le cache (`cached`: true)."""
+    """Run bambu-studio.exe. Without presets, a Bambu 3MF keeps its own settings but is moved to the
+    default printer if it targeted another model; an STL gets the default presets.
+    `filaments` alone on a project: replaces its filament (the last one named fills the remaining slots),
+    the project's process is kept. `plate` 0: every plate, in a single result.3mf.
+    An identical slice already done comes back from the cache (`cached`: true)."""
     exe = config.executable()
     if not exe.exists():
-        raise FileNotFoundError(f"Bambu Studio introuvable : {exe}")
+        raise FileNotFoundError(f"Bambu Studio not found: {exe}")
     model_paths = [Path(m).resolve() for m in models]
     for m in model_paths:
         if not m.exists():
-            raise FileNotFoundError(f"Modèle introuvable : {m}")
-    if (process or filaments) and not machine:
-        raise ValueError("Indiquer aussi `machine` quand on charge des presets.")
+            raise FileNotFoundError(f"Model not found: {m}")
+    if process and not machine:
+        raise ValueError("Also give `machine` when loading a process preset.")
     if machine and process_overrides and not process:
-        raise ValueError("`process_overrides` avec `machine` demande aussi `process`.")
+        raise ValueError("`process_overrides` with `machine` also needs `process`.")
     if machine and filament_overrides and not filaments:
-        raise ValueError("`filament_overrides` avec `machine` demande aussi `filaments`.")
-    # Sans presets, les overrides s'appliquent aux réglages propres du projet 3MF.
-    project_overrides = {} if machine else {**(filament_overrides or {}), **(process_overrides or {})}
-    if project_overrides and any(m.suffix.lower() != ".3mf" for m in model_paths):
-        raise ValueError("Sans `machine`, les overrides ne s'appliquent qu'à un projet 3MF Bambu.")
+        raise ValueError("`filament_overrides` with `machine` also needs `filaments`.")
+    machine, process, filaments = _default_presets(models, machine, process, filaments)
+    # Without presets, overrides go to the 3MF project's own settings, converted on the way to the
+    # default printer. A loaded filament carries its own overrides.
+    project_overrides = {} if machine else {**({} if filaments else filament_overrides or {}),
+                                            **(process_overrides or {})}
+    convert_to = None if machine else config.default_machine()
+    if filaments and not machine:
+        filaments = filaments + filaments[-1:] * (_filament_slots(model_paths) - len(filaments))
 
-    # Dossier court : la CLI échoue quand le chemin de travail est trop long.
+    # Short folder: the CLI fails when the working path is too long.
     work = Path(tempfile.mkdtemp(prefix="bmcp_"))
     args = [str(exe), "--debug", "1"]
     applied: dict = {}
@@ -62,13 +97,13 @@ def run(models: list[str], machine: str | None = None, process: str | None = Non
             applied["process"] = _flatten("process", process, process_overrides, work / "process.json")
             settings_files.append("process.json")
         args += ["--load-settings", ";".join(settings_files)]
-        if filaments:
-            names = []
-            for i, name in enumerate(filaments, 1):
-                applied[f"filament_{i}"] = _flatten("filament", name, filament_overrides, work / f"filament_{i}.json")
-                names.append(f"filament_{i}.json")
-            args += ["--load-filaments", ";".join(names)]
-    # Toujours slicer : sans --slice, la CLI refuse d'exporter le 3MF (code -13).
+    if filaments:
+        names = []
+        for i, name in enumerate(filaments, 1):
+            applied[f"filament_{i}"] = _flatten("filament", name, filament_overrides, work / f"filament_{i}.json")
+            names.append(f"filament_{i}.json")
+        args += ["--load-filaments", ";".join(names)]
+    # Always slice: without --slice, the CLI refuses to export the 3MF (code -13).
     args += ["--slice", str(plate)]
     bed_type = bed_type or config.load().get("default_bed_type")
     if bed_type:
@@ -77,51 +112,56 @@ def run(models: list[str], machine: str | None = None, process: str | None = Non
         args += ["--orient", "1"]
     if arrange:
         args += ["--arrange", "1"]
-    # Les modèles aussi sont copiés dans le dossier court, sous leur nom d'origine.
+    # Models are copied into the short folder too, under their original name.
     (work / "in").mkdir()
     local_models = []
     for m in model_paths:
         local = work / "in" / m.name
         shutil.copy2(m, local)
-        if project_overrides:
-            edited = threemf.edit(str(local), project_overrides, output_path=str(local.with_suffix(".edit")))
+        if convert_to:
+            edited = threemf.edit(str(local), project_overrides, output_path=str(local.with_suffix(".edit")),
+                                  machine=convert_to)
             Path(edited["output"]).replace(local)
-            applied[m.name] = edited["changes"]
+            if edited["changes"]:
+                applied[m.name] = edited["changes"]
         local_models.append(f"in/{m.name}")
     args += ["--export-3mf", "result.3mf", "--outputdir", "out"] + local_models
 
-    key = _cache_key(exe, args, project_overrides, model_paths, work)
+    key = _cache_key(exe, args, [project_overrides, convert_to], model_paths, work)
     overrides = {**(filament_overrides or {}), **(process_overrides or {})}
     cached = _cache_get(key)
     if cached:
         shutil.rmtree(work, ignore_errors=True)
-        history.record(model_paths, cached, machine, process, filaments, overrides, label)
+        history.record(model_paths, cached, machine or convert_to, process, filaments, overrides, label)
         return cached
 
     started = time.time()
     try:
         proc = _run_cli(args, work, timeout_s)
     except subprocess.TimeoutExpired:
-        # Bambu Studio se fige parfois sans raison (0 % CPU) : un second essai passe en général.
+        # Bambu Studio sometimes hangs for no reason (0 % CPU): a second attempt usually works.
         shutil.rmtree(work / "out", ignore_errors=True)
         try:
             proc = _run_cli(args, work, timeout_s)
         except subprocess.TimeoutExpired:
             shutil.rmtree(work, ignore_errors=True)
-            raise TimeoutError(f"Bambu Studio n'a pas répondu en {timeout_s} s, deux fois de suite. "
-                               "Fermer les bambu-studio.exe restés ouverts (Gestionnaire des tâches) "
-                               "et réessayer.") from None
+            raise TimeoutError(f"Bambu Studio did not answer within {timeout_s} s, twice in a row. "
+                               "Close any bambu-studio.exe left running (Task Manager) and try again.") from None
     elapsed = round(time.time() - started, 1)
 
     out_dir = work / "out"
     result_json = {}
     if (out_dir / "result.json").exists():
         result_json = json.loads((out_dir / "result.json").read_text(encoding="utf-8-sig"))
-    dest = _unique_dir(f"{model_paths[0].stem}{'_' + label if label else ''}_{time.strftime('%Y%m%d-%H%M%S')}")
+    # output/<project>/<variant>/<timestamp>[_plate-N]/: one folder per project, then per variant.
+    dest = _unique_dir(model_paths[0].stem, label or "slice",
+                       time.strftime("%Y%m%d-%H%M%S") + (f"_plate-{plate}" if plate else ""))
     produced = []
     if out_dir.is_dir():
+        # result.3mf already holds every plate's G-code: no duplicate plate_N.gcode next to it.
+        bundled = (out_dir / "result.3mf").exists()
         for f in out_dir.iterdir():
-            if f.is_file():
+            if f.is_file() and not (bundled and f.suffix == ".gcode"):
                 shutil.move(str(f), dest / f.name)
                 produced.append(str(dest / f.name))
     shutil.rmtree(work, ignore_errors=True)
@@ -133,7 +173,7 @@ def run(models: list[str], machine: str | None = None, process: str | None = Non
     for p in result_json.get("sliced_plates", []):
         seconds = int(p.get("total_predication") or 0)
         plates.append({
-            "plate": p.get("id"), "time_s": seconds, "time": f"{seconds // 3600}h{(seconds % 3600) // 60:02d}",
+            "plate": p.get("id"), "time_s": seconds, "time": history.duration(seconds),
             "filament_g": round(sum(f.get("total_used_g", 0) for f in p.get("filaments", [])), 2),
             "filaments": p.get("filaments"), "warning": p.get("warning_message") or None,
             "time_by_feature_s": {k: round(v) for k, v in (p.get("feature_type_times") or {}).items()},
@@ -150,7 +190,7 @@ def run(models: list[str], machine: str | None = None, process: str | None = Non
         summary["stderr"] = (proc.stderr or proc.stdout or "")[-3000:]
     else:
         _cache_put(key, summary)
-    history.record(model_paths, summary, machine, process, filaments, overrides, label)
+    history.record(model_paths, summary, machine or convert_to, process, filaments, overrides, label)
     return summary
 
 
@@ -159,7 +199,7 @@ def _run_cli(args: list, work: Path, timeout_s: int) -> subprocess.CompletedProc
     try:
         out, err = proc.communicate(timeout=timeout_s)
     except subprocess.TimeoutExpired:
-        # Tuer tout l'arbre : la CLI peut avoir lancé des processus enfants.
+        # Kill the whole tree: the CLI may have started child processes.
         subprocess.run(["taskkill", "/F", "/T", "/PID", str(proc.pid)], capture_output=True)
         try:
             proc.communicate(timeout=10)
@@ -169,9 +209,14 @@ def _run_cli(args: list, work: Path, timeout_s: int) -> subprocess.CompletedProc
     return subprocess.CompletedProcess(args, proc.returncode, out, err)
 
 
-def _unique_dir(name: str) -> Path:
-    """Dossier de sortie neuf, même pour des slices lancés dans la même seconde."""
-    base = config.output_dir()
+def _safe(part: str) -> str:
+    """Name usable as a Windows folder."""
+    return "".join("_" if c in '<>:"/\\|?*' else c for c in part).strip(" .") or "_"
+
+
+def _unique_dir(project: str, variant: str, name: str) -> Path:
+    """New output folder, even for slices started within the same second."""
+    base = config.output_dir() / _safe(project) / _safe(variant)
     for i in range(1000):
         dest = base / (name if i == 0 else f"{name}-{i}")
         try:
@@ -179,14 +224,14 @@ def _unique_dir(name: str) -> Path:
             return dest
         except FileExistsError:
             continue
-    raise OSError(f"Impossible de créer un dossier de sortie pour {name}")
+    raise OSError(f"Could not create an output folder for {name}")
 
 
-def _cache_key(exe: Path, args: list, project_overrides: dict, model_paths: list[Path], work: Path) -> str:
-    """Empreinte de tout ce qui change le résultat : modèles, presets aplatis, overrides, options, version."""
+def _cache_key(exe: Path, args: list, project_edits: list, model_paths: list[Path], work: Path) -> str:
+    """Fingerprint of everything that changes the result: models, flattened presets, overrides, options, version."""
     h = hashlib.sha256()
     h.update(f"{exe}|{exe.stat().st_mtime_ns}".encode())
-    h.update(json.dumps([args[1:], project_overrides], sort_keys=True).encode())
+    h.update(json.dumps([args[1:], project_edits], sort_keys=True).encode())
     for path in model_paths + sorted(work.glob("*.json")):
         h.update(path.read_bytes())
     return h.hexdigest()[:32]
@@ -197,7 +242,7 @@ def _cache_get(key: str) -> dict | None:
     if not entry.exists():
         return None
     summary = json.loads(entry.read_text(encoding="utf-8"))
-    # Résultat inutilisable si l'utilisateur a supprimé le dossier de sortie.
+    # Unusable if the user deleted the output folder.
     if not all(Path(f).exists() for f in summary.get("files", [])):
         entry.unlink(missing_ok=True)
         return None
@@ -210,38 +255,51 @@ def _cache_put(key: str, summary: dict) -> None:
     (folder / f"{key}.json").write_text(json.dumps(summary, ensure_ascii=False), encoding="utf-8")
 
 
-# Recettes pour une P1S buse 0.4, appliquées par-dessus les réglages du projet ou du preset.
+# Recipes tuned on a P1S with a 0.4 nozzle, applied on top of the project's or preset's settings.
+# The filament's max volumetric speed already caps speeds (15-21 mm³/s in PLA): recipes mostly play
+# on accelerations, well below the printer's maximum (see fit_machine). 0.20mm Standard baseline:
+# 10,000 default, 5,000 on the outer wall, 2,000 on top surfaces.
 GOALS = {
-    "qualite": {"layer_height": "0.16", "initial_layer_print_height": "0.2", "outer_wall_speed": "200",
-                "outer_wall_acceleration": "5000", "outer_wall_line_width": "0.42", "top_surface_speed": "200",
-                "top_surface_acceleration": "5000", "top_surface_line_width": "0.42", "seam_position": "aligned",
-                "enable_overhang_speed": "1", "slow_down_layer_time": "6"},
-    "equilibre": {"layer_height": "0.2", "initial_layer_print_height": "0.2", "outer_wall_speed": "250",
-                  "outer_wall_acceleration": "6000", "outer_wall_line_width": "0.42",
-                  "top_surface_line_width": "0.42", "seam_position": "aligned", "enable_overhang_speed": "1",
-                  "slow_down_layer_time": "4"},
-    "vitesse": {"layer_height": "0.28", "wall_loops": "2", "top_shell_layers": "3", "bottom_shell_layers": "2",
-                "sparse_infill_density": "10%", "sparse_infill_pattern": "lightning", "slow_down_layer_time": "4"},
-    "solidite": {"layer_height": "0.2", "wall_loops": "4", "top_shell_layers": "5", "bottom_shell_layers": "4",
+    # Gentler outer wall and top surfaces for the finish.
+    "quality": {"layer_height": "0.16", "initial_layer_print_height": "0.2", "outer_wall_speed": "150",
+                "outer_wall_acceleration": "3000", "outer_wall_line_width": "0.42", "inner_wall_speed": "250",
+                "top_surface_speed": "150", "top_surface_acceleration": "1500", "top_surface_line_width": "0.42",
+                "default_acceleration": "8000", "seam_position": "aligned", "enable_overhang_speed": "1",
+                "slow_down_layer_time": "6"},
+    "balanced": {"layer_height": "0.2", "initial_layer_print_height": "0.2", "outer_wall_speed": "200",
+                 "outer_wall_acceleration": "5000", "outer_wall_line_width": "0.42",
+                 "top_surface_line_width": "0.42", "top_surface_acceleration": "2000",
+                 "default_acceleration": "10000", "seam_position": "aligned", "enable_overhang_speed": "1",
+                 "slow_down_layer_time": "4"},
+    # No lightning infill: it leaves top layers bridging over large gaps. Adaptive cubic stays light
+    # in the core and gets denser under surfaces, with 4 top layers to close them well.
+    "speed": {"layer_height": "0.28", "wall_loops": "2", "top_shell_layers": "4", "bottom_shell_layers": "3",
+              "sparse_infill_density": "12%", "sparse_infill_pattern": "adaptivecubic",
+              "default_acceleration": "14000", "outer_wall_acceleration": "7000",
+              "top_surface_acceleration": "3000", "slow_down_layer_time": "4"},
+    "strength": {"layer_height": "0.2", "wall_loops": "4", "top_shell_layers": "5", "bottom_shell_layers": "4",
                  "sparse_infill_density": "25%", "sparse_infill_pattern": "gyroid", "slow_down_layer_time": "4"},
-    "leger": {"layer_height": "0.24", "wall_loops": "2", "top_shell_layers": "3", "bottom_shell_layers": "3",
-              "sparse_infill_density": "8%", "sparse_infill_pattern": "lightning", "slow_down_layer_time": "4"},
+    "light": {"layer_height": "0.24", "wall_loops": "2", "top_shell_layers": "4", "bottom_shell_layers": "3",
+              "sparse_infill_density": "10%", "sparse_infill_pattern": "adaptivecubic",
+              "default_acceleration": "12000", "outer_wall_acceleration": "6000",
+              "top_surface_acceleration": "2500", "slow_down_layer_time": "4"},
 }
 
 
 def _split(settings: dict, machine: str | None, process: str | None,
            filaments: list[str] | None) -> tuple[dict, dict]:
-    """Avec des presets, répartit les réglages entre process et filament (sans presets : tout au projet).
-    Une clé inconnue des deux reste côté process, pour que l'erreur propose les bons noms."""
-    if not (machine and process):
+    """With presets, split settings between process and filament (without presets everything goes to the
+    project, except the filament part when a filament is loaded on top of the project).
+    A key known to neither stays on the process side, so the error suggests the right names."""
+    if not (machine and process) and not filaments:
         return settings, {}
     filament_keys = (presets.resolve("filament", filaments[0]).keys() | presets.known_keys("filament")
                      if filaments else set())
-    process_keys = presets.resolve("process", process).keys() | presets.known_keys("process")
+    process_keys = (presets.resolve("process", process).keys() if process else set()) | presets.known_keys("process")
     unknown = [k for k in settings if k not in process_keys and k not in filament_keys]
-    if unknown and not filaments:
-        raise ValueError(f"Réglages absents du process {unknown} : réglages filament (indiquer `filaments`) "
-                         "ou nom mal orthographié.")
+    if unknown and not filaments and process:
+        raise ValueError(f"Settings missing from the process {unknown}: filament settings (give `filaments`) "
+                         "or misspelled names.")
     fil = {k: v for k, v in settings.items() if k in filament_keys and k not in process_keys}
     return {k: v for k, v in settings.items() if k not in fil}, fil
 
@@ -249,22 +307,26 @@ def _split(settings: dict, machine: str | None, process: str | None,
 def _row(name: str, settings: dict, result: dict) -> dict:
     plates = result.get("plates") or []
     seconds = sum(p["time_s"] for p in plates)
-    return {"name": name, "time": f"{seconds // 3600}h{(seconds % 3600) // 60:02d}", "time_s": seconds,
+    return {"name": name, "time": history.duration(seconds), "time_s": seconds,
             "weight_g": round(sum(p["filament_g"] for p in plates), 2),
             "slicer_warnings": [p["warning"] for p in plates if p.get("warning")],
             "checks": result.get("checks", []), "settings": settings,
+            "plates": [{"plate": p["plate"], "time": p["time"], "time_s": p["time_s"], "weight_g": p["filament_g"]}
+                       for p in plates],
             "project_3mf": result.get("project_3mf"), "cached": result.get("cached", False),
-            **({"error": result.get("message") or "échec du slicing"} if result.get("return_code") else {})}
+            **({"error": result.get("message") or "slicing failed"} if result.get("return_code") else {})}
 
 
 def compare(models: list[str], variants: dict[str, dict], include_original: bool = True,
             machine: str | None = None, process: str | None = None, filaments: list[str] | None = None,
             plate: int = 0, bed_type: str | None = None, max_workers: int | None = None) -> dict:
-    """Slice plusieurs variantes en parallèle et renvoie un tableau comparatif."""
+    """Slice several variants in parallel and return a comparison table."""
     jobs = ([("original", {})] if include_original else []) + list(variants.items())
     if not jobs:
-        raise ValueError("Aucune variante à slicer.")
-    workers = max_workers or min(len(jobs), max(1, (os.cpu_count() or 4) // 3))
+        raise ValueError("No variant to slice.")
+    # One Bambu Studio per two cores: measured 17 % faster than one per three on 12 cores / 16 GB.
+    workers = max_workers or min(len(jobs), max(1, (os.cpu_count() or 4) // 2))
+    machine, process, filaments = _default_presets(models, machine, process, filaments)
 
     def one(job):
         name, settings = job
@@ -293,20 +355,21 @@ def compare(models: list[str], variants: dict[str, dict], include_original: bool
 def optimize(models: list[str], goal: str, machine: str | None = None, process: str | None = None,
              filaments: list[str] | None = None, plate: int = 0, bed_type: str | None = None,
              compare_all: bool = True) -> dict:
-    """Applique la recette de `goal` (et, si compare_all, les autres) puis désigne la variante conseillée."""
+    """Apply the `goal` recipe (and, with compare_all, the others) then pick the recommended variant."""
     if goal not in GOALS:
-        raise ValueError(f"Objectif inconnu {goal!r} : {list(GOALS)}")
-    chosen = GOALS if compare_all else {goal: GOALS[goal]}
+        raise ValueError(f"Unknown goal {goal!r}: {list(GOALS)}")
+    target = machine or config.default_machine()
+    chosen = {name: fit_machine(recipe, target) for name, recipe in GOALS.items() if compare_all or name == goal}
     result = compare(models, chosen, True, machine, process, filaments, plate, bed_type)
     best = next(r for r in result["variants"] if r["name"] == goal)
-    # Vitesse et légèreté se mesurent : la recette ne bat pas toujours un projet déjà poussé.
-    metric = {"vitesse": "time_s", "leger": "weight_g"}.get(goal)
+    # Speed and weight are measurable: the recipe does not always beat an already tuned project.
+    metric = {"speed": "time_s", "light": "weight_g"}.get(goal)
     ok = [r for r in result["variants"] if "error" not in r]
     if metric and ok:
         best = min(ok, key=lambda r: r[metric])
     result["goal"] = goal
     result["recommended"] = best["name"]
     if "error" not in best:
-        result["how_to_apply"] = ("edit_3mf avec ces réglages (settings) pour un projet, "
-                                  "ou save_preset pour en faire un preset.")
+        result["how_to_apply"] = ("edit_3mf with these settings for a project, "
+                                  "or save_preset to turn them into a preset.")
     return result

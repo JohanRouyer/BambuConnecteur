@@ -1,4 +1,4 @@
-"""Point d'entrée du connecteur, lançable depuis n'importe quel dossier."""
+"""Connector entry point, runnable from any folder."""
 import sys
 from pathlib import Path
 
