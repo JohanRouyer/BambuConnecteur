@@ -1,0 +1,8 @@
+{
+    "default_bed_type": "Textured PEI Plate",
+    "printer": {
+        "host": "",
+        "serial": "",
+        "access_code": ""
+    }
+}

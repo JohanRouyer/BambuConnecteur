@@ -1,0 +1,10 @@
+# Environnement Python
+.venv/
+__pycache__/
+*.pyc
+
+# Résultats de slicing
+output/
+
+# Config locale (code d'accès de l'imprimante) : voir config.example.json
+config.json
