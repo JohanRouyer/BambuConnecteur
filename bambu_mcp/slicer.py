@@ -31,7 +31,18 @@ def _default_presets(models: list[str], machine: str | None, process: str | None
     """STL ou 3MF géométrie seule sans presets : P1S, process standard et PLA par défaut."""
     if machine or all(threemf.is_project(m) for m in models):
         return machine, process, filaments
-    return config.default_machine(), config.default_process(), [materials.MATERIALS["PLA"]["filament"]]
+    return (config.default_machine(), config.default_process(),
+            filaments or [materials.MATERIALS["PLA"]["filament"]])
+
+
+def _filament_slots(models: list[Path]) -> int:
+    """Nombre de filaments déclarés par les projets 3MF (au moins 1)."""
+    slots = 1
+    for m in models:
+        if threemf.is_project(str(m)):
+            ids = threemf.get_settings(str(m), "filament_settings_id").get("filament_settings_id")
+            slots = max(slots, len(ids) if isinstance(ids, list) else 1)
+    return slots
 
 
 def run(models: list[str], machine: str | None = None, process: str | None = None,
@@ -41,7 +52,8 @@ def run(models: list[str], machine: str | None = None, process: str | None = Non
         label: str | None = None, timeout_s: int = 300) -> dict:
     """Lance bambu-studio.exe. Sans presets, un 3MF Bambu garde ses propres réglages, mais passe sur
     l'imprimante par défaut (P1S) s'il visait un autre modèle ; un STL reçoit les presets par défaut.
-    `plate` 0 : tous les plateaux, dans un seul result.3mf.
+    `filaments` seul sur un projet : remplace son filament (le dernier nommé complète les emplacements),
+    process du projet gardé. `plate` 0 : tous les plateaux, dans un seul result.3mf.
     Un slice identique déjà fait est renvoyé depuis le cache (`cached`: true)."""
     exe = config.executable()
     if not exe.exists():
@@ -50,17 +62,20 @@ def run(models: list[str], machine: str | None = None, process: str | None = Non
     for m in model_paths:
         if not m.exists():
             raise FileNotFoundError(f"Modèle introuvable : {m}")
-    if (process or filaments) and not machine:
-        raise ValueError("Indiquer aussi `machine` quand on charge des presets.")
+    if process and not machine:
+        raise ValueError("Indiquer aussi `machine` quand on charge un preset process.")
     if machine and process_overrides and not process:
         raise ValueError("`process_overrides` avec `machine` demande aussi `process`.")
     if machine and filament_overrides and not filaments:
         raise ValueError("`filament_overrides` avec `machine` demande aussi `filaments`.")
     machine, process, filaments = _default_presets(models, machine, process, filaments)
     # Sans presets, les overrides s'appliquent aux réglages propres du projet 3MF,
-    # converti au passage vers l'imprimante par défaut.
-    project_overrides = {} if machine else {**(filament_overrides or {}), **(process_overrides or {})}
+    # converti au passage vers l'imprimante par défaut. Un filament chargé garde ses propres overrides.
+    project_overrides = {} if machine else {**({} if filaments else filament_overrides or {}),
+                                            **(process_overrides or {})}
     convert_to = None if machine else config.default_machine()
+    if filaments and not machine:
+        filaments = filaments + filaments[-1:] * (_filament_slots(model_paths) - len(filaments))
 
     # Dossier court : la CLI échoue quand le chemin de travail est trop long.
     work = Path(tempfile.mkdtemp(prefix="bmcp_"))
@@ -73,12 +88,12 @@ def run(models: list[str], machine: str | None = None, process: str | None = Non
             applied["process"] = _flatten("process", process, process_overrides, work / "process.json")
             settings_files.append("process.json")
         args += ["--load-settings", ";".join(settings_files)]
-        if filaments:
-            names = []
-            for i, name in enumerate(filaments, 1):
-                applied[f"filament_{i}"] = _flatten("filament", name, filament_overrides, work / f"filament_{i}.json")
-                names.append(f"filament_{i}.json")
-            args += ["--load-filaments", ";".join(names)]
+    if filaments:
+        names = []
+        for i, name in enumerate(filaments, 1):
+            applied[f"filament_{i}"] = _flatten("filament", name, filament_overrides, work / f"filament_{i}.json")
+            names.append(f"filament_{i}.json")
+        args += ["--load-filaments", ";".join(names)]
     # Toujours slicer : sans --slice, la CLI refuse d'exporter le 3MF (code -13).
     args += ["--slice", str(plate)]
     bed_type = bed_type or config.load().get("default_bed_type")
@@ -265,15 +280,16 @@ GOALS = {
 
 def _split(settings: dict, machine: str | None, process: str | None,
            filaments: list[str] | None) -> tuple[dict, dict]:
-    """Avec des presets, répartit les réglages entre process et filament (sans presets : tout au projet).
+    """Avec des presets, répartit les réglages entre process et filament (sans presets : tout au projet,
+    sauf la part filament quand un filament est chargé par-dessus le projet).
     Une clé inconnue des deux reste côté process, pour que l'erreur propose les bons noms."""
-    if not (machine and process):
+    if not (machine and process) and not filaments:
         return settings, {}
     filament_keys = (presets.resolve("filament", filaments[0]).keys() | presets.known_keys("filament")
                      if filaments else set())
-    process_keys = presets.resolve("process", process).keys() | presets.known_keys("process")
+    process_keys = (presets.resolve("process", process).keys() if process else set()) | presets.known_keys("process")
     unknown = [k for k in settings if k not in process_keys and k not in filament_keys]
-    if unknown and not filaments:
+    if unknown and not filaments and process:
         raise ValueError(f"Réglages absents du process {unknown} : réglages filament (indiquer `filaments`) "
                          "ou nom mal orthographié.")
     fil = {k: v for k, v in settings.items() if k in filament_keys and k not in process_keys}

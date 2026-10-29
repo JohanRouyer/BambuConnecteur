@@ -48,6 +48,17 @@ def test_cache_and_history(project):
     assert len(rows) == 2 and rows[0]["cached"] and rows[0]["overrides"] == {"wall_loops": "3"}
 
 
+def test_filament_swapped_on_project_keeps_process(project):
+    r = slicer.compare([project["project_3mf"]], {"v": {"wall_loops": "4", "slow_down_layer_time": "7"}},
+                       include_original=False, filaments=["Bambu PETG HF @BBL P1S 0.4 nozzle"])
+    v = r["variants"][0]
+    assert "error" not in v, v
+    s = threemf.get_settings(v["project_3mf"], "filament_type wall_loops slow_down_layer_time print_settings_id")
+    assert s["filament_type"] == ["PETG"] and s["wall_loops"] == "4"
+    assert s["slow_down_layer_time"] == ["7"]  # Réglage filament de la recette posé sur le filament chargé.
+    assert s["print_settings_id"] == PROCESS
+
+
 def test_compare_runs_in_parallel(project):
     r = slicer.compare([project["project_3mf"]], {"fin": {"layer_height": "0.12"}, "gros": {"layer_height": "0.28"},
                                                   "faute": {"layer_heigth": "0.2"}})

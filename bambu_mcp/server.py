@@ -108,6 +108,7 @@ def slice_model(models: list[str], machine: str | None = None, process: str | No
     (l'original n'est pas modifié) ; un projet fait pour une autre imprimante passe sur la P1S.
     Un STL ou un 3MF « géométrie seule » devient un projet Bambu complet (result.3mf), avec
     `machine` (+ process, filaments) ou à défaut P1S / 0.20mm Standard / PLA.
+    `filaments` seul sur un projet : remplace son filament, réglages d'impression du projet gardés.
     `plate` 0 = tous les plateaux dans un seul result.3mf. `bed_type` ex. "Textured PEI Plate"."""
     return slicer.run(models, machine, process, filaments, process_overrides, filament_overrides,
                       plate, bed_type, orient, arrange)
@@ -121,7 +122,8 @@ def compare_slices(models: list[str], variants: dict[str, dict], include_origina
     """Slice plusieurs variantes EN PARALLÈLE en un seul appel : {nom: {réglage: valeur}}.
     Renvoie temps, poids (total et par plateau), écart en % avec l'original et contrôles de chaque variante.
     Sur un 3MF sans `machine`, les réglages s'appliquent au projet, passé sur la P1S (l'original
-    n'est pas modifié). `plate` 0 = tous les plateaux dans un seul result.3mf par variante."""
+    n'est pas modifié). `filaments` seul : filament du projet remplacé (preset, ex. via material_guide).
+    `plate` 0 = tous les plateaux dans un seul result.3mf par variante."""
     return slicer.compare(models, variants, include_original, machine, process, filaments, plate, bed_type)
 
 
@@ -132,7 +134,8 @@ def optimize(models: list[str], goal: Literal["qualite", "equilibre", "vitesse",
              compare_all: bool = True) -> dict:
     """Recettes P1S prêtes à l'emploi : slice l'original et les 5 objectifs en parallèle,
     puis désigne la variante de `goal`. `compare_all` false : seulement l'original et `goal`.
-    Laisser `plate` à 0 : un seul result.3mf par variante avec tous les plateaux, détail par plateau inclus."""
+    Laisser `plate` à 0 : un seul result.3mf par variante avec tous les plateaux, détail par plateau inclus.
+    `filaments` (preset, ex. celui de material_guide) : filament choisi par l'utilisateur, appliqué au projet."""
     return slicer.optimize(models, goal, machine, process, filaments, plate, bed_type, compare_all)
 
 
