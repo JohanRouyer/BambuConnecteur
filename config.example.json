@@ -1,4 +1,5 @@
 {
+    "default_machine": "Bambu Lab P1S 0.4 nozzle",
     "default_bed_type": "Textured PEI Plate",
     "printer": {
         "host": "",

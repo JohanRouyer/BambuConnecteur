@@ -43,7 +43,7 @@ mcp = _Server(
 
 @mcp.tool()
 def list_presets(kind: Kind, source: Literal["all", "user", "system"] = "user",
-                 printer_name: str | None = "Bambu Lab P1S 0.4 nozzle",
+                 printer_name: str | None = config.DEFAULT_MACHINE,
                  search: str | None = None) -> list[dict]:
     """Liste les presets (process, filament ou machine). `printer_name` filtre ceux compatibles ;
     passer null pour tout voir. `search` : mots à trouver dans le nom."""

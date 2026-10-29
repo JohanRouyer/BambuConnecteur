@@ -8,6 +8,11 @@ from . import config
 _lock = threading.Lock()  # compare_slices écrit depuis plusieurs threads
 
 
+def duration(seconds: int) -> str:
+    """Durée au format Bambu Studio : 1h05."""
+    return f"{seconds // 3600}h{(seconds % 3600) // 60:02d}"
+
+
 def _file():
     return config.output_dir() / "history.jsonl"
 
@@ -19,7 +24,7 @@ def record(models: list, summary: dict, machine: str | None, process: str | None
     entry = {"at": time.strftime("%Y-%m-%d %H:%M:%S"), "models": [str(m) for m in models], "label": label,
              "machine": machine, "process": process, "filaments": filaments, "overrides": overrides,
              "ok": summary.get("return_code") == 0, "time_s": seconds,
-             "time": f"{seconds // 3600}h{(seconds % 3600) // 60:02d}",
+             "time": duration(seconds),
              "weight_g": round(sum(p["filament_g"] for p in plates), 2), "plates": len(plates),
              "checks": len(summary.get("checks") or []), "cached": summary.get("cached", False),
              "project_3mf": summary.get("project_3mf")}

@@ -6,7 +6,7 @@ import xml.etree.ElementTree as ET
 import zipfile
 from pathlib import Path
 
-from . import presets
+from . import history, presets
 
 MODEL = "3D/3dmodel.model"
 PROJECT = "Metadata/project_settings.config"
@@ -60,7 +60,7 @@ def parse_slice_info(raw: bytes) -> list[dict]:
                      for f in plate.findall("filament")]
         warnings = [{k: w.get(k) for k in ("msg", "level", "error_code")} for w in plate.findall("warning")]
         plates.append({"plate": meta.get("index"), "time_s": seconds,
-                       "time": f"{seconds // 3600}h{(seconds % 3600) // 60:02d}",
+                       "time": history.duration(seconds),
                        "weight_g": meta.get("weight"), "support_used": meta.get("support_used"),
                        "filaments": filaments, "warnings": warnings})
     return plates
@@ -89,7 +89,7 @@ def inspect(path: str) -> dict:
             info["slice_results"] = parse_slice_info(z.read(SLICE_INFO))
     if not info["has_project_settings"]:
         info["note"] = ("Fichier sans réglages Bambu : seule la géométrie sera chargée. "
-                        "Utiliser export_bambu_project pour lui appliquer des presets.")
+                        "slice_model ou prepare_print en font un projet P1S complet.")
     return info
 
 
@@ -197,7 +197,7 @@ def edit(path: str, settings: dict | None = None, object_settings: dict | None =
     with zipfile.ZipFile(src) as z:
         names = z.namelist()
         if PROJECT not in names:
-            raise ValueError("Pas de réglages Bambu dans ce 3MF : utiliser export_bambu_project d'abord.")
+            raise ValueError("Pas de réglages Bambu dans ce 3MF : en faire d'abord un projet avec slice_model.")
         ps = json.loads(z.read(PROJECT))
         changes: list = []
         converted = _set_machine(ps, machine) if machine else None

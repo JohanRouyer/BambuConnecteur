@@ -3,7 +3,7 @@ import shutil
 import tempfile
 from pathlib import Path
 
-from . import config, geometry, materials, presets, slicer
+from . import config, geometry, history, materials, presets, slicer
 
 
 def prepare(models: list[str], material: str = "PLA", goal: str = "equilibre", copies: int = 1,
@@ -83,7 +83,7 @@ def prepare(models: list[str], material: str = "PLA", goal: str = "equilibre", c
     plates = result.get("plates") or []
     seconds = sum(p["time_s"] for p in plates)
     return {"ok": result.get("return_code") == 0, "message": result.get("message"),
-            "time": f"{seconds // 3600}h{(seconds % 3600) // 60:02d}", "weight_g": round(sum(p["filament_g"] for p in plates), 2),
+            "time": history.duration(seconds), "weight_g": round(sum(p["filament_g"] for p in plates), 2),
             "plates": len(plates), "project_3mf": result.get("project_3mf"), "decisions": decisions,
             "warnings": warnings + [p["warning"] for p in plates if p.get("warning")] + result.get("checks", []),
             "models": analyses, "material": {k: guide[k] for k in ("enclosure", "ams_ok", "nozzle_c", "notes")},
