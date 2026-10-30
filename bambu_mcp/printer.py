@@ -27,7 +27,8 @@ def status(timeout_s: float = 10, include_raw: bool = False) -> dict:
     host, serial, code = cfg.get("host"), cfg.get("serial"), cfg.get("access_code")
     missing = [k for k, v in {"host": host, "serial": serial, "access_code": code}.items() if not v]
     if missing:
-        raise ValueError(f"Fill in the \"printer\" section of {config.CONFIG_FILE}: {missing}")
+        raise ValueError(f"Fill in the printer connection (plugin settings, or the \"printer\" section of "
+                         f"{config.CONFIG_FILE}): {missing}")
 
     report: dict = {}
     error: dict = {}

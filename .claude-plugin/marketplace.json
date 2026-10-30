@@ -1,0 +1,16 @@
+{
+  "name": "bambu-studio-advisor",
+  "owner": {
+    "name": "Johan Rouyer"
+  },
+  "metadata": {
+    "description": "Bambu Studio Advisor: analyze, slice and compare 3D prints for Bambu Lab printers with Claude."
+  },
+  "plugins": [
+    {
+      "name": "bambu-studio-advisor",
+      "source": "./",
+      "description": "Analyze, slice and compare 3D prints with Bambu Studio for your Bambu Lab printer."
+    }
+  ]
+}

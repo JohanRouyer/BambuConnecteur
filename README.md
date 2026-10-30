@@ -29,6 +29,7 @@ your printer, build plate and usual filament. Recipes are tuned on a 0.4 mm nozz
 - [Available tools](#available-tools)
 - [How it works](#how-it-works)
 - [Safety](#safety)
+- [Privacy Policy](#privacy-policy)
 - [Known limitations](#known-limitations)
 - [Troubleshooting](#troubleshooting)
 - [Development](#development)
@@ -74,7 +75,7 @@ The connector **never starts a print**: you open the produced 3MF in Bambu Studi
 > Recommendation, things to watch, per-plate details and the path of the `result.3mf` to open.
 
 This summary comes from the [`3d-printing`](skills/3d-printing/SKILL.md) skill shipped with the
-connector (see [step 4](#4-install-the-3d-printing-skill-recommended)).
+connector (installed with the plugin, or by hand in [step 4](#4-install-the-3d-printing-skill-recommended)).
 
 ## Requirements
 
@@ -82,15 +83,42 @@ connector (see [step 4](#4-install-the-3d-printing-skill-recommended)).
 |---|---|
 | System | **Windows 10 or 11** |
 | Bambu Studio | Installed (default path: `C:\Program Files\Bambu Studio`) and launched at least once |
-| Python | **3.10 or newer** ([python.org](https://www.python.org/downloads/)) |
+| Python | **3.10 or newer** ([python.org](https://www.python.org/downloads/)), or [uv](https://docs.astral.sh/uv/) for the Claude plugin |
 | Claude | [Claude Code](https://claude.com/claude-code) (terminal, desktop app or IDE) or Claude Desktop |
 | Git | To clone the repository (or download the ZIP from GitHub) |
 
 ## Installation
 
+### Option A: Claude plugin (simplest)
+
+The plugin installs the connector **and** the `3d-printing` skill in one go, and keeps them up to date.
+
+1. Install [uv](https://docs.astral.sh/uv/getting-started/installation/) once, in PowerShell:
+
+   ```powershell
+   winget install --id astral-sh.uv
+   ```
+
+2. In Claude Code, add the plugin:
+
+   ```text
+   /plugin marketplace add JohanRouyer/BambuStudio-Advisor-MCP
+   /plugin install bambu-studio-advisor@bambu-studio-advisor
+   ```
+
+3. Optional: fill in the printer IP address, serial number and access code when Claude Code asks
+   (only the printer status needs them). The access code is kept in your system's secure storage.
+
+On first start, `uv` creates the Python environment from `uv.lock` (about 30 s), then the connector is
+ready: go to [First use](#5-first-use). Your defaults and results are kept in the plugin's data folder
+(`~/.claude/plugins/data/…`), so they survive updates. If you had copied the skill by hand
+(step 4 below), delete `~\.claude\skills\3d-printing` to avoid having it twice.
+
+### Option B: manual installation
+
 Run the following commands in **PowerShell**.
 
-### 1. Get the project
+#### 1. Get the project
 
 ```powershell
 git clone https://github.com/JohanRouyer/BambuStudio-Advisor-MCP.git
@@ -99,14 +127,14 @@ cd BambuStudio-Advisor-MCP
 
 Put the folder wherever you like, but **do not move it afterwards**: Claude starts it by its full path.
 
-### 2. Create the Python environment
+#### 2. Create the Python environment
 
 ```powershell
 python -m venv .venv
 .venv\Scripts\python.exe -m pip install -r requirements.txt
 ```
 
-### 3. Register the connector with Claude
+#### 3. Register the connector with Claude
 
 **Claude Code**: from the project folder, register it for all your projects (`--scope user`):
 
@@ -130,7 +158,7 @@ path with your folder's (with doubled backslashes):
 
 Then restart Claude so it loads the connector.
 
-### 4. Install the `3d-printing` skill (recommended)
+#### 4. Install the `3d-printing` skill (recommended)
 
 The skill tells Claude how to chain the tools as soon as you talk about 3D printing or give an STL /
 3MF file: analysis, filament question, slicing, full summary. Without it the tools still work, but you
@@ -143,7 +171,7 @@ Copy-Item -Recurse -Force skills\3d-printing "$env:USERPROFILE\.claude\skills\"
 
 The skill is used by Claude Code. To update it after a `git pull`, run the `Copy-Item` command again.
 
-### 5. First use
+#### 5. First use
 
 Give Claude a file, or ask *"set up my printer"*. Since nothing is set yet, it first asks for:
 
@@ -151,7 +179,7 @@ Give Claude a file, or ask *"set up my printer"*. Since nothing is set yet, it f
 - your usual **build plate** (Textured PEI, Cool Plate, High Temp, Engineering);
 - your usual **filament** (Bambu PLA Basic, PLA Matte, PETG HF…).
 
-It saves these choices in `config.json`, then carries on with your request. To change them later,
+It saves these choices in `config.json` (in the plugin's data folder with option A), then carries on with your request. To change them later,
 just say so: *"I switched to an A1"*, *"my usual plate is the Cool Plate"*.
 
 To check the installation, ask *"show me the bambu-studio connector info"*: the answer should contain
@@ -184,7 +212,8 @@ Copy-Item config.example.json config.json
 
 ### Printer connection (optional)
 
-Only the `printer_status` tool needs it. In `config.json`, fill in the `printer` section:
+Only the `printer_status` tool needs it. With the plugin, enter it in the plugin settings (they take
+precedence over `config.json`). Otherwise, in `config.json`, fill in the `printer` section:
 
 | Key | Where to find it on the printer's screen |
 |---|---|
@@ -282,6 +311,24 @@ output/
 - The printer's access code gives local control of it: `config.json` must stay on your PC (it is
   excluded from git).
 
+## Privacy Policy
+
+The connector runs **entirely on your PC** and collects no personal data: no telemetry, no account,
+no internet requests of its own.
+
+- **Collected**: only the 3D files you point to, your Bambu Studio presets, your defaults and,
+  optionally, your printer's IP address, serial number and access code.
+- **Usage and storage**: files are sliced locally with your `bambu-studio.exe`; results and defaults
+  stay on your PC (plugin data folder or project folder); the access code goes to your system's secure
+  storage with the plugin. The printer is only read over your local network.
+- **Sharing**: nothing is sent to the developer or any third party. Tool results go to Claude, under
+  [Anthropic's privacy policy](https://www.anthropic.com/legal/privacy). On first start, `uv`
+  downloads the Python packages of `uv.lock` from PyPI.
+- **Retention**: everything stays until you delete it; uninstalling the plugin deletes its data folder.
+- **Contact**: [GitHub issues](https://github.com/JohanRouyer/BambuStudio-Advisor-MCP/issues).
+
+Full policy: [PRIVACY.md](PRIVACY.md).
+
 ## Known limitations
 
 - **Windows only** for now (Windows paths, `taskkill`, `tasklist`).
@@ -296,7 +343,7 @@ output/
 | Problem | Fix |
 |---|---|
 | `Bambu Studio not found` | Install Bambu Studio, or set its folder in `bambu_studio_dir` |
-| The tools do not show up in Claude | Check both paths in the registration (step 3), then restart Claude |
+| The tools do not show up in Claude | Plugin: check that `uv --version` works in a new terminal. Manual: check both paths in the registration (step 3). Then restart Claude |
 | `… preset not found` | Launch Bambu Studio once, sign in to your account, then try again (close names are suggested) |
 | A slice hangs | Close any `bambu-studio.exe` left running in Task Manager |
 | `printer_status` fails | Check the IP, the access code, LAN mode and that the PC is on the same network |
@@ -329,7 +376,11 @@ bambu_mcp/
 ├── history.py     slice history
 └── config.py      paths and config.json
 skills/3d-printing/SKILL.md   Claude Code skill
+.claude-plugin/               Claude plugin manifest and marketplace
+.mcp.json                     how the plugin starts the connector (uv + uv.lock)
 ```
+
+After changing dependencies in `pyproject.toml`, run `uv lock` and commit `uv.lock`.
 
 ## License
 
