@@ -93,11 +93,8 @@ connector (installed with the plugin, or by hand in [step 4](#4-install-the-3d-p
 
 The plugin installs the connector **and** the `3d-printing` skill in one go, and keeps them up to date.
 
-1. Install [uv](https://docs.astral.sh/uv/getting-started/installation/) once, in PowerShell:
-
-   ```powershell
-   winget install --id astral-sh.uv
-   ```
+1. Install [uv](https://docs.astral.sh/uv/getting-started/installation/) once, following its
+   official installation page (the Windows installer or WinGet package both work).
 
 2. In Claude Code, add the plugin:
 
@@ -109,7 +106,7 @@ The plugin installs the connector **and** the `3d-printing` skill in one go, and
 3. Optional: fill in the printer IP address, serial number and access code when Claude Code asks
    (only the printer status needs them). The access code is kept in your system's secure storage.
 
-On first start, `uv` creates the Python environment from `uv.lock` (about 30 s), then the connector is
+On first start, `uv` creates the Python environment from `uv.lock` in the plugin folder (about 30 s), then the connector is
 ready: go to [First use](#5-first-use). Your defaults and results are kept in the plugin's data folder
 (`~/.claude/plugins/data/…`), so they survive updates. If you had copied the skill by hand
 (step 4 below), delete `~\.claude\skills\3d-printing` to avoid having it twice.
