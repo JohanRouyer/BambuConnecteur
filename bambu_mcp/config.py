@@ -5,7 +5,10 @@ import subprocess
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
-CONFIG_FILE = ROOT / "config.json"
+# Where config.json, output\ and backups\ live. The Claude plugin points it at its data folder,
+# which survives plugin updates; a plain clone keeps everything in the project folder.
+HOME = Path(os.environ.get("BAMBU_ADVISOR_HOME") or ROOT)
+CONFIG_FILE = HOME / "config.json"
 
 # Fallback target printer and a compatible starting process (P1S presets reuse the X1C processes).
 DEFAULT_MACHINE = "Bambu Lab P1S 0.4 nozzle"
@@ -20,6 +23,7 @@ def load() -> dict:
 
 def save(updates: dict) -> None:
     """Merge `updates` into config.json (other keys, `printer` included, are kept)."""
+    CONFIG_FILE.parent.mkdir(parents=True, exist_ok=True)
     CONFIG_FILE.write_text(json.dumps({**load(), **updates}, indent=4, ensure_ascii=False) + "\n", encoding="utf-8")
 
 
@@ -82,19 +86,28 @@ def user_presets_dir() -> Path | None:
 
 
 def output_dir() -> Path:
-    d = Path(load().get("output_dir") or ROOT / "output")
+    d = Path(load().get("output_dir") or HOME / "output")
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
 def backup_dir() -> Path:
-    d = ROOT / "backups"
+    d = HOME / "backups"
     d.mkdir(parents=True, exist_ok=True)
     return d
 
 
+# Printer connection given through the environment (the plugin's settings), over config.json.
+PRINTER_ENV = {"host": "BAMBU_PRINTER_HOST", "serial": "BAMBU_PRINTER_SERIAL", "access_code": "BAMBU_PRINTER_ACCESS_CODE"}
+
+
 def printer() -> dict:
-    return load().get("printer", {})
+    cfg = dict(load().get("printer", {}))
+    for key, var in PRINTER_ENV.items():
+        value = os.environ.get(var, "").strip()
+        if value and not value.startswith("${"):  # An unset plugin setting may arrive unsubstituted.
+            cfg[key] = value
+    return cfg
 
 
 def bambu_studio_running() -> bool:

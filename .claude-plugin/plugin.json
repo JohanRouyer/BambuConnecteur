@@ -1,0 +1,42 @@
+{
+  "name": "bambu-studio-advisor",
+  "displayName": "Bambu Studio Advisor",
+  "version": "1.0.0",
+  "description": "Analyze, slice and compare 3D prints with the real Bambu Studio engine for your Bambu Lab printer (P1S, X1C, A1...), then get a ready-to-print 3MF. Runs locally on Windows.",
+  "icon": "./assets/icon.png",
+  "author": {
+    "name": "Johan Rouyer",
+    "url": "https://github.com/JohanRouyer"
+  },
+  "homepage": "https://github.com/JohanRouyer/BambuStudio-Advisor-MCP",
+  "repository": "https://github.com/JohanRouyer/BambuStudio-Advisor-MCP",
+  "license": "MIT",
+  "keywords": [
+    "3d-printing",
+    "bambu-lab",
+    "bambu-studio",
+    "slicer",
+    "3mf",
+    "stl"
+  ],
+  "userConfig": {
+    "printer_host": {
+      "type": "string",
+      "title": "Printer IP address (optional)",
+      "description": "Only for the printer status tool. On the printer: Settings > Network.",
+      "default": ""
+    },
+    "printer_serial": {
+      "type": "string",
+      "title": "Printer serial number (optional)",
+      "description": "Only for the printer status tool. On the printer: Settings > Device.",
+      "default": ""
+    },
+    "printer_access_code": {
+      "type": "string",
+      "title": "Printer LAN access code (optional)",
+      "description": "Only for the printer status tool. On the printer: Settings > Network. Stored in your system's secure storage.",
+      "sensitive": true
+    }
+  }
+}

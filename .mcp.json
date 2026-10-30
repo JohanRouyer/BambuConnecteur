@@ -1,0 +1,15 @@
+{
+  "mcpServers": {
+    "bambu-studio": {
+      "command": "uv",
+      "args": ["run", "--frozen", "--project", "${CLAUDE_PLUGIN_ROOT}", "${CLAUDE_PLUGIN_ROOT}/run_server.py"],
+      "env": {
+        "UV_PROJECT_ENVIRONMENT": "${CLAUDE_PLUGIN_DATA}/venv",
+        "BAMBU_ADVISOR_HOME": "${CLAUDE_PLUGIN_DATA}",
+        "BAMBU_PRINTER_HOST": "${user_config.printer_host}",
+        "BAMBU_PRINTER_SERIAL": "${user_config.printer_serial}",
+        "BAMBU_PRINTER_ACCESS_CODE": "${user_config.printer_access_code}"
+      }
+    }
+  }
+}

@@ -3,7 +3,7 @@ import json
 
 import pytest
 
-from bambu_mcp import analysis, history, materials, presets, slicer
+from bambu_mcp import analysis, config, history, materials, presets, slicer
 
 PS = {"layer_height": "0.2", "initial_layer_print_height": "0.2", "nozzle_diameter": ["0.4"],
       "line_width": "0.42", "outer_wall_line_width": "0.42", "inner_wall_line_width": "0.45",
@@ -122,3 +122,11 @@ def test_materials_aliases():
 
 def test_split_without_presets_keeps_everything():
     assert slicer._split({"a": "1"}, None, None, None) == ({"a": "1"}, {})
+
+
+def test_printer_settings_from_the_plugin_override_config(isolated_config, monkeypatch):
+    isolated_config.write_text('{"printer": {"host": "1.2.3.4", "serial": "S1"}}', encoding="utf-8")
+    monkeypatch.setenv("BAMBU_PRINTER_HOST", "10.0.0.5")
+    monkeypatch.setenv("BAMBU_PRINTER_SERIAL", "")  # Empty plugin setting: config.json wins.
+    monkeypatch.setenv("BAMBU_PRINTER_ACCESS_CODE", "${user_config.printer_access_code}")  # Left unsubstituted.
+    assert config.printer() == {"host": "10.0.0.5", "serial": "S1"}

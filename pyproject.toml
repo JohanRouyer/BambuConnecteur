@@ -1,0 +1,17 @@
+[project]
+name = "bambu-studio-advisor"
+version = "1.0.0"
+description = "MCP connector that lets Claude analyze, slice and compare 3D prints with Bambu Studio."
+readme = "README.md"
+license = "MIT"
+requires-python = ">=3.10"
+dependencies = [
+    "mcp>=2.3,<3",
+    "paho-mqtt>=2.1,<3",
+    "numpy>=2,<3",
+]
+
+[tool.uv]
+package = false
+# The connector drives bambu-studio.exe: only Windows is supported.
+environments = ["sys_platform == 'win32'"]
